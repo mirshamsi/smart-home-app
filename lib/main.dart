@@ -1,122 +1,469 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:flutter_serial_communication/flutter_serial_communication.dart';
+import 'package:flutter_serial_communication/models/device_info.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _flutterSerialCommunicationPlugin = FlutterSerialCommunication();
+  bool isConnected = false;
+  List<DeviceInfo> connectedDevices = [];
+  List<String> receivedMessages = [];
+  TextEditingController messageController = TextEditingController();
+  List<int> receivedBytesBuffer = []; // Buffer to accumulate bytes
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Listener for receiving messages
+    _flutterSerialCommunicationPlugin
+        .getSerialMessageListener()
+        .receiveBroadcastStream()
+        .listen((event) {
+          receivedBytesBuffer.addAll(event); // Add incoming bytes to buffer
+
+          // Check for end of message (e.g., #...F)
+          int endIndex = -1;
+          for (int i = 0; i < receivedBytesBuffer.length; i++) {
+            if (receivedBytesBuffer[i] == 0x46) {
+              // ASCII code for 'F'
+              int startIndex = -1;
+              for (int j = i - 1; j >= 0; j--) {
+                if (receivedBytesBuffer[j] == 0x23) {
+                  // ASCII code for '#'
+                  startIndex = j;
+                  endIndex = i;
+                  break;
+                }
+              }
+              if (startIndex != -1) break;
+            }
+          }
+
+          if (endIndex != -1) {
+            List<int> completeMessageBytes = receivedBytesBuffer.sublist(
+              0,
+              endIndex + 1,
+            );
+            String message;
+            try {
+              message = utf8.decode(completeMessageBytes); // Decode using UTF-8
+            } catch (e) {
+              message = "Error decoding: $e"; // Handle decoding errors
+            }
+
+            receivedBytesBuffer.removeRange(
+              0,
+              endIndex + 1,
+            ); // Clear the processed message from buffer
+
+            message = message.trim(); // Remove whitespace and line endings
+
+            setState(() {
+              receivedMessages.add(message);
+              _processReceivedMessage(message);
+            });
+            debugPrint("Received From Native: $message");
+          }
+        });
+
+    // Listener for connection status
+    _flutterSerialCommunicationPlugin
+        .getDeviceConnectionListener()
+        .receiveBroadcastStream()
+        .listen((event) {
+          setState(() {
+            isConnected = event;
+          });
+        });
+  }
+
+  _getAllConnectedDevicesButtonPressed() async {
+    List<DeviceInfo> newConnectedDevices =
+        await _flutterSerialCommunicationPlugin.getAvailableDevices();
+    setState(() {
+      connectedDevices = newConnectedDevices;
+    });
+  }
+
+  _connectButtonPressed(DeviceInfo deviceInfo) async {
+    bool isConnectionSuccess = await _flutterSerialCommunicationPlugin.connect(
+      deviceInfo,
+      115200,
+    );
+    debugPrint("Is Connection Success: $isConnectionSuccess");
+  }
+
+  _disconnectButtonPressed() async {
+    await _flutterSerialCommunicationPlugin.disconnect();
+    setState(() {
+      receivedMessages.clear();
+    });
+  }
+
+  _sendMessageButtonPressed() async {
+    String message = messageController.text;
+    if (message.isNotEmpty) {
+      bool isMessageSent = await _flutterSerialCommunicationPlugin.write(
+        Uint8List.fromList(message.codeUnits),
+      );
+      debugPrint("Is Message Sent: $isMessageSent");
+      messageController.clear();
+    }
+  }
+
+  _sendLearnCommand() async {
+    String command = "LEARN\n";
+    bool isMessageSent = await _flutterSerialCommunicationPlugin.write(
+      Uint8List.fromList(command.codeUnits),
+    );
+    debugPrint("Is LEARN Command Sent: $isMessageSent");
+  }
+
+  _sendTransCommand() async {
+    String command = "TRANS\r";
+    bool isMessageSent = await _flutterSerialCommunicationPlugin.write(
+      Uint8List.fromList(command.codeUnits),
+    );
+    debugPrint("Is TRANS Command Sent: $isMessageSent");
+  }
+
+  TextEditingController statusController = TextEditingController();
+
+  String extractNumbersBetween(String input, String startChar, String endChar) {
+    // ساخت الگوی عبارت منظم
+    RegExp regExp = RegExp('$startChar(\\d+)$endChar');
+
+    // جستجو برای تطابق
+    Match? match = regExp.firstMatch(input);
+
+    // اگر تطابق پیدا شد، اعداد را برگردان
+    if (match != null) {
+      return match.group(1)!;
+    }
+
+    // اگر تطابقی پیدا نشد، رشته خالی برگردان
+    return '';
+  }
+
+  void _processReceivedMessage(String message) {
+    if (message.startsWith("#") && message.endsWith("F")) {
+      // تجزیه رشته کد
+      String id = message.substring(1, 2); // بخش ID
+      String relayNumber = message.substring(3, 4); // شماره رله
+      String deviceType = message.substring(5, 6); // نوع دستگاه
+      String sourceId = extractNumbersBetween(
+        message,
+        'C',
+        'D',
+      ); // آی دی دستگاه مبدا
+      String destinationId = extractNumbersBetween(
+        message,
+        'D',
+        'E',
+      ); // آی دی مقصد
+      String packetNumber = extractNumbersBetween(
+        message,
+        'E',
+        'F',
+      ); // شماره بسته
+
+      // تعیین وضعیت روشن/خاموش
+      String powerStatus = (id == "1") ? "ON" : "OFF";
+
+      // نمایش وضعیت در TextBox
+      String status =
+          """
+      Power Status: $powerStatus
+      Relay Number: $relayNumber
+      Device Type: $deviceType
+      Source ID: $sourceId
+      Destination ID: $destinationId
+      Packet Number: $packetNumber
+      """;
+
+      setState(() {
+        statusController.text = status;
+      });
+    } else {
+      setState(() {
+        statusController.text = "Invalid message format!";
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Flutter Serial Communication App')),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Is Connected: $isConnected"),
+                const SizedBox(height: 16.0),
+                ElevatedButton(
+                  onPressed: _getAllConnectedDevicesButtonPressed,
+                  child: const Text("Get All Connected Devices"),
+                ),
+                const SizedBox(height: 16.0),
+                ...connectedDevices.asMap().entries.map((entry) {
+                  return Row(
+                    children: [
+                      Flexible(child: Text(entry.value.productName)),
+                      const SizedBox(width: 16.0),
+                      ElevatedButton(
+                        onPressed: () {
+                          _connectButtonPressed(entry.value);
+                        },
+                        child: const Text("Connect"),
+                      ),
+                    ],
+                  );
+                }).toList(),
+                const SizedBox(height: 16.0),
+                if (isConnected) ...[
+                  ElevatedButton(
+                    onPressed: _disconnectButtonPressed,
+                    child: const Text("Disconnect"),
+                  ),
+                  const SizedBox(height: 16.0),
+                  const Text(
+                    "Status:",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextField(
+                    controller: statusController,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: "Status will be displayed here",
+                    ),
+                    readOnly: true,
+                  ),
+                  const SizedBox(height: 16.0),
+                  TextField(
+                    controller: messageController,
+                    decoration: const InputDecoration(
+                      labelText: "Enter Message",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  ElevatedButton(
+                    onPressed: _sendMessageButtonPressed,
+                    child: const Text("Send Message"),
+                  ),
+                  const SizedBox(height: 16.0),
+                  const Text(
+                    "Received Messages:",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Container(
+                    height: 200, // ارتفاع ثابت برای بخش دریافت پیام‌ها
+                    padding: const EdgeInsets.all(8.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    child: ListView.builder(
+                      itemCount: receivedMessages.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: SelectableText(
+                            receivedMessages[index],
+                            style: const TextStyle(fontSize: 14.0),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16.0),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                        onPressed: _sendLearnCommand,
+                        child: const Text("LEARN"),
+                      ),
+                      ElevatedButton(
+                        onPressed: _sendTransCommand,
+                        child: const Text("TRANS"),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16.0),
+                const Text(
+                  "Switch Types:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8.0),
+                Builder(
+                  builder: (context) {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SwitchPage(
+                              switchType: "Single Pole",
+                              switchId: "SP-001", // ID برای Single Pole
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text("Single Pole Switch"),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8.0),
+                Builder(
+                  builder: (context) {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SwitchPage(
+                              switchType: "Double Pole",
+                              switchId: "DP-001", // ID برای Double Pole
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text("Double Pole Switch"),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8.0),
+                Builder(
+                  builder: (context) {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SwitchPage(
+                              switchType: "Three Pole",
+                              switchId: "TP-001", // ID برای Three Pole
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text("Three Pole Switch"),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8.0),
+                Builder(
+                  builder: (context) {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SwitchPage(
+                              switchType: "Four Pole",
+                              switchId: "FP-001", // ID برای Four Pole
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text("Four Pole Switch"),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class SwitchPage extends StatelessWidget {
+  final String switchType;
+  final String switchId;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  const SwitchPage({
+    super.key,
+    required this.switchType,
+    required this.switchId,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
+      appBar: AppBar(title: Text('$switchType Switch - $switchId')),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
+          children: [
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              'This is the $switchType Switch Page',
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              'Switch ID: $switchId',
+              style: const TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            // نمایش کلیدها بر اساس نوع سوئیچ
+            if (switchType == "Single Pole") ...[
+              _buildSwitchButton("Switch 1", switchId),
+            ] else if (switchType == "Double Pole") ...[
+              _buildSwitchButton("Switch 1", "$switchId-1"),
+              _buildSwitchButton("Switch 2", "$switchId-2"),
+            ] else if (switchType == "Three Pole") ...[
+              _buildSwitchButton("Switch 1", "$switchId-1"),
+              _buildSwitchButton("Switch 2", "$switchId-2"),
+              _buildSwitchButton("Switch 3", "$switchId-3"),
+            ] else if (switchType == "Four Pole") ...[
+              _buildSwitchButton("Switch 1", "$switchId-1"),
+              _buildSwitchButton("Switch 2", "$switchId-2"),
+              _buildSwitchButton("Switch 3", "$switchId-3"),
+              _buildSwitchButton("Switch 4", "$switchId-4"),
+            ],
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Go Back'),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+
+  Widget _buildSwitchButton(String label, String id) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: ElevatedButton(
+        onPressed: () {
+          debugPrint("$label Pressed (ID: $id)");
+        },
+        child: Text("$label (ID: $id)"),
+      ),
     );
   }
 }
