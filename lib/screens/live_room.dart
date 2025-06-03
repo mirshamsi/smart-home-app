@@ -1,233 +1,403 @@
-// import 'dart:convert';
-// import 'package:flutter/material.dart';
-// import 'package:provider/provider.dart';
-// import 'package:flutter_serial_communication/flutter_serial_communication.dart';
-// import 'package:flutter_serial_communication/models/device_info.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_serial_communication/models/device_info.dart';
+import 'package:topaz/models/item_device_model.dart';
+import 'package:topaz/providers/connection_provider.dart';
+import 'package:topaz/providers/device_provider.dart';
+import 'package:topaz/providers/theme_provider.dart';
+import 'package:topaz/screens/tab_screen.dart';
+import 'package:topaz/services/hive_storage_service.dart';
+import 'package:topaz/services/serial_service.dart';
+import 'package:topaz/widgets/item_list_tile.dart';
 
-// class LiveRoom extends StatefulWidget {
-//   @override
-//   _LiveRoomState createState() => _LiveRoomState();
-// }
+class LiveRoom extends StatefulWidget {
+  final String itemName;
 
-// class _LiveRoomState extends State<LiveRoom> {
-//   final _flutterSerialCommunicationPlugin = FlutterSerialCommunication();
-//   List<int> receivedBytesBuffer = [];
-//   List<String> receivedMessages = [];
-//   String deviceId = '';
-//   final SharedPreferencesService _prefsService = SharedPreferencesService();
-//   final TextEditingController _textController = TextEditingController();
-//   List<ItemDeviceModel> _items = [];
+  const LiveRoom({super.key, required this.itemName});
 
-//   @override
-//   void initState() {
-//     super.initState();
+  @override
+  _LiveRoomState createState() => _LiveRoomState();
+}
 
-//     // اتصال خودکار به دستگاه
-//     _checkAndConnectToDevice();
+class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
+  List<Map<String, String>> devices = [];
+  final HiveStorageService _storageService = HiveStorageService();
+  final TextEditingController _textController = TextEditingController();
+  List<ItemDeviceModel> _items = [];
+  final SerialService _serialService =
+      SerialService(); // اضافه کردن SerialService
+  List<int> receivedBytesBuffer = []; // بافر برای پیام‌های سریال
+  List<String> receivedMessages = []; // لیست پیام‌های دریافتی
+  StreamSubscription? _serialSubscription; // اشتراک برای گوش‌دهنده سریال
 
-//     _flutterSerialCommunicationPlugin
-//         .getSerialMessageListener()
-//         .receiveBroadcastStream()
-//         .listen((event) {
-//           receivedBytesBuffer.addAll(event);
-//           int endIndex = -1;
-//           for (int i = 0; i < receivedBytesBuffer.length; i++) {
-//             if (receivedBytesBuffer[i] == 0x46) {
-//               int startIndex = -1;
-//               for (int j = i - 1; j >= 0; j--) {
-//                 if (receivedBytesBuffer[j] == 0x23) {
-//                   startIndex = j;
-//                   endIndex = i;
-//                   break;
-//                 }
-//               }
-//               if (startIndex != -1) break;
-//             }
-//           }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    Provider.of<DeviceProvider>(
+      context,
+      listen: false,
+    ).loadDevicesFromHive(widget.itemName);
+    _loadDevicesFromHive();
+    _checkAndConnectToDevice();
+    _loadItems();
+    _setupSerialListener();
+  }
 
-//           if (endIndex != -1) {
-//             List<int> completeMessageBytes = receivedBytesBuffer.sublist(
-//               0,
-//               endIndex + 1,
-//             );
-//             String message;
-//             try {
-//               message = utf8.decode(completeMessageBytes);
-//             } catch (e) {
-//               message = "Error decoding: $e";
-//             }
-//             receivedBytesBuffer.removeRange(0, endIndex + 1);
-//             message = message.trim();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    debugPrint("Lifecycle State (LiveRoom): $state");
+    if (state == AppLifecycleState.resumed) {
+      _checkAndConnectToDevice();
+      _setupSerialListener();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _serialSubscription?.cancel();
+    }
+  }
 
-//             setState(() {
-//               receivedMessages.add(message);
-//               _processReceivedMessage(message);
-//             });
-//             debugPrint("Received From Native: $message");
-//           }
-//         });
+  Future<void> _loadDevicesFromHive() async {
+    final devices = Provider.of<DeviceProvider>(
+      context,
+      listen: false,
+    ).getDevices(widget.itemName);
+    setState(() {
+      this.devices = devices;
+    });
+  }
 
-//     _flutterSerialCommunicationPlugin
-//         .getDeviceConnectionListener()
-//         .receiveBroadcastStream()
-//         .listen((event) {
-//           Provider.of<ConnectionProvider>(
-//             context,
-//             listen: false,
-//           ).setConnectionStatus(event); // به‌روزرسانی وضعیت با Provider
-//         });
+  Future<void> _loadItems() async {
+    List<String> itemsJson = await _storageService.loadItems();
+    setState(() {
+      _items = itemsJson.map((item) => ItemDeviceModel(item)).toList();
+    });
+  }
 
-//     _loadItems();
-//   }
+  Future<void> _saveItems() async {
+    List<String> itemsJson = _items.map((item) => item.name).toList();
+    await _storageService.saveItems(itemsJson);
+  }
 
-//   Future<void> _checkAndConnectToDevice() async {
-//     List<DeviceInfo> devices = await _flutterSerialCommunicationPlugin
-//         .getAvailableDevices();
-//     if (devices.isNotEmpty) {
-//       bool isConnectionSuccess = await _flutterSerialCommunicationPlugin
-//           .connect(
-//             devices.first, // اتصال به اولین دستگاه
-//             115200,
-//           );
-//       if (isConnectionSuccess) {
-//         Provider.of<ConnectionProvider>(
-//           context,
-//           listen: false,
-//         ).setConnectionStatus(true);
-//       }
-//     }
-//   }
+  void _addItem(String name) {
+    setState(() {
+      _items.add(ItemDeviceModel(name));
+    });
+    _saveItems();
+  }
 
-//   void _processReceivedMessage(String message) {
-//     if (message.startsWith("#") && message.endsWith("F")) {
-//       RegExp regex = RegExp(r"#(\d)A(\d+)B6C7D(\d+)E\d+F");
-//       Match? match = regex.firstMatch(message);
-//       if (match != null) {
-//         String receivedDeviceId = match.group(3)!;
-//         setState(() {
-//           deviceId = receivedDeviceId;
-//         });
-//       }
-//     }
-//   }
+  void _removeItem(int index) {
+    setState(() {
+      _items.removeAt(index);
+    });
+    _saveItems();
+  }
 
-//   Future<void> _loadItems() async {
-//     List<String> itemsJson = await _prefsService.loadItems();
-//     setState(() {
-//       _items = itemsJson.map((item) => ItemDeviceModel(item)).toList();
-//     });
-//   }
+  void _navigateToDetailScreen(String itemName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => TabScreen(itemName: itemName)),
+    );
+  }
 
-//   Future<void> _saveItems() async {
-//     List<String> itemsJson = _items.map((item) => item.name).toList();
-//     await _prefsService.saveItems(itemsJson);
-//   }
+  void _showAddItemDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('اضافه کردن آیتم جدید'),
+          content: TextField(
+            controller: _textController,
+            decoration: const InputDecoration(
+              hintText: 'نام آیتم را وارد کنید',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('لغو'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (_textController.text.isNotEmpty) {
+                  _addItem(_textController.text);
+                  _textController.clear();
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('اضافه کردن'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-//   void _addItem(String name) {
-//     setState(() {
-//       _items.add(ItemDeviceModel(name));
-//     });
-//     _saveItems();
-//   }
+  void _toggleDarkMode() {
+    Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
+  }
 
-//   void _removeItem(int index) {
-//     setState(() {
-//       _items.removeAt(index);
-//     });
-//     _saveItems();
-//   }
+  Future<void> _checkAndConnectToDevice() async {
+    List<DeviceInfo> devices = await _serialService.getAvailableDevices();
+    if (devices.isNotEmpty) {
+      bool isConnectionSuccess = await _serialService.connect(
+        devices.first,
+        115200,
+      );
+      if (isConnectionSuccess) {
+        Provider.of<ConnectionProvider>(
+          context,
+          listen: false,
+        ).setConnectionStatus(true);
+        debugPrint("اتصال به دستگاه ${devices.first.deviceName} برقرار شد");
+      } else {
+        debugPrint("اتصال به دستگاه ناموفق بود");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("اتصال به دستگاه ناموفق بود")),
+        );
+      }
+    } else {
+      debugPrint("هیچ دستگاهی یافت نشد");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("هیچ دستگاهی یافت نشد")));
+    }
+  }
 
-//   void _navigateToDetailScreen(String itemName) {
-//     Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => TabScreen(itemName: itemName)),
-//     );
-//   }
+  void _setupSerialListener() {
+    _serialSubscription?.cancel();
+    _serialSubscription = _serialService.getSerialMessages().listen((event) {
+      receivedBytesBuffer.addAll(event);
+      int endIndex = receivedBytesBuffer.indexOf(0x46);
+      if (endIndex != -1) {
+        int startIndex = receivedBytesBuffer.lastIndexOf(0x23, endIndex);
+        if (startIndex != -1) {
+          String message = utf8
+              .decode(receivedBytesBuffer.sublist(startIndex, endIndex + 1))
+              .trim();
+          receivedBytesBuffer.removeRange(0, endIndex + 1);
+          debugPrint("پیام دریافتی (LiveRoom): $message");
+          setState(() {
+            receivedMessages.add(message);
+            _processReceivedMessage(message);
+          });
+        }
+      }
+    });
+  }
 
-//   void _showAddItemDialog() {
-//     showDialog(
-//       context: context,
-//       builder: (BuildContext context) {
-//         return AlertDialog(
-//           title: Text('اضافه کردن آیتم جدید'),
-//           content: TextField(
-//             controller: _textController,
-//             decoration: InputDecoration(hintText: 'نام آیتم را وارد کنید'),
-//           ),
-//           actions: [
-//             TextButton(
-//               onPressed: () {
-//                 Navigator.of(context).pop();
-//               },
-//               child: Text('لغو'),
-//             ),
-//             ElevatedButton(
-//               onPressed: () {
-//                 if (_textController.text.isNotEmpty) {
-//                   _addItem(_textController.text);
-//                   _textController.clear();
-//                   Navigator.of(context).pop();
-//                 }
-//               },
-//               child: Text('اضافه کردن'),
-//             ),
-//           ],
-//         );
-//       },
-//     );
-//   }
+  void _processReceivedMessage(String message) {
+    RegExp regex = RegExp(r"#(\d)A(\d+)B(\d+)C(\d+)D(\d+)E(\d+)F");
+    Match? match = regex.firstMatch(message);
+    if (match != null) {
+      String stateCode = match.group(1)!;
+      String buttonCode = match.group(2)!;
+      // String deviceInfo = match.group(3)!;
+      String receivedDeviceId = match.group(4)!;
+      bool newState = stateCode == "1";
+      int relayNumber = int.parse(buttonCode);
+      Provider.of<DeviceProvider>(
+        context,
+        listen: false,
+      ).updateButtonState(receivedDeviceId, relayNumber, newState);
+      debugPrint(
+        "وضعیت تاچ به‌روزرسانی شد: $receivedDeviceId, رله $relayNumber, حالت $newState",
+      );
+    }
+  }
 
-//   @override
-//   Widget build(BuildContext context) {
-//     final connectionProvider = Provider.of<ConnectionProvider>(
-//       context,
-//     ); // دسترسی به Provider
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _textController.dispose();
+    _serialSubscription?.cancel();
+    super.dispose();
+  }
 
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Row(
-//           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//           children: [
-//             Text('محل نصب دستگاه'),
-//             Row(
-//               children: [
-//                 Icon(
-//                   connectionProvider.isConnected ? Icons.wifi : Icons.wifi_off,
-//                   color: connectionProvider.isConnected
-//                       ? Colors.green
-//                       : Colors.red,
-//                 ),
-//                 SizedBox(width: 8),
-//                 Text(
-//                   connectionProvider.isConnected ? 'متصل' : 'قطع شده',
-//                   style: TextStyle(
-//                     color: connectionProvider.isConnected
-//                         ? Colors.green
-//                         : Colors.red,
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ],
-//         ),
-//       ),
-//       body: ListView.builder(
-//         itemCount: _items.length,
-//         itemBuilder: (context, index) {
-//           return ItemListTile(
-//             itemName: _items[index].name,
-//             onDelete: () => _removeItem(index),
-//             onTap: () => _navigateToDetailScreen(_items[index].name),
-//           );
-//         },
-//       ),
-//       floatingActionButton: FloatingActionButton(
-//         backgroundColor: Colors.amber,
-//         shape: CircleBorder(),
-//         onPressed: _showAddItemDialog,
-//         child: Icon(Icons.add),
-//         tooltip: 'اضافه کردن آیتم جدید',
-//       ),
-//     );
-//   }
-// }
+  @override
+  Widget build(BuildContext context) {
+    return Consumer3<ConnectionProvider, DeviceProvider, ThemeProvider>(
+      builder:
+          (context, connectionProvider, deviceProvider, themeProvider, child) {
+            final bool isTablet = MediaQuery.of(context).size.width > 600;
+
+            return Scaffold(
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: themeProvider.isDarkMode
+                              ? [Colors.grey[900]!, Colors.grey[800]!]
+                              : [Colors.amber[700]!, Colors.amber[400]!],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 24.0 : 16.0,
+                        vertical: 16.0,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                "محل نصب دستگاه",
+                                style: TextStyle(
+                                  fontSize: isTablet ? 30 : 20,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              AnimatedContainer(
+                                duration: Duration(milliseconds: 300),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: connectionProvider.isConnected
+                                      ? Colors.green.withOpacity(0.2)
+                                      : Colors.red.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: connectionProvider.isConnected
+                                        ? Colors.green
+                                        : Colors.red,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      connectionProvider.isConnected
+                                          ? Icons.check_circle
+                                          : Icons.error,
+                                      size: isTablet ? 20 : 16,
+                                      color: connectionProvider.isConnected
+                                          ? Colors.green
+                                          : Colors.red,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      connectionProvider.isConnected
+                                          ? 'متصل'
+                                          : 'قطع شده',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 16 : 14,
+                                        color: connectionProvider.isConnected
+                                            ? Colors.green
+                                            : Colors.red,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.settings,
+                                  color: Colors.grey[800],
+                                  size: isTablet ? 28 : 24,
+                                ),
+                                onPressed: () {},
+                              ),
+                              PopupMenuButton<String>(
+                                icon: Icon(
+                                  themeProvider.isDarkMode
+                                      ? Icons.light_mode
+                                      : Icons.dark_mode,
+                                  color: Colors.white,
+                                  size: isTablet ? 28 : 24,
+                                ),
+                                onSelected: (String value) {
+                                  if (value == 'toggle_theme')
+                                    _toggleDarkMode();
+                                },
+                                itemBuilder: (BuildContext context) => [
+                                  PopupMenuItem<String>(
+                                    value: 'toggle_theme',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          themeProvider.isDarkMode
+                                              ? Icons.light_mode
+                                              : Icons.dark_mode,
+                                          color: themeProvider.isDarkMode
+                                              ? Colors.yellow[300]
+                                              : Colors.yellow[800],
+                                        ),
+                                        SizedBox(width: isTablet ? 10 : 8),
+                                        Text(
+                                          themeProvider.isDarkMode
+                                              ? 'حالت روشن'
+                                              : 'حالت تاریک',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Container(
+                        color: themeProvider.isDarkMode
+                            ? Colors.grey[850]
+                            : Colors.grey[100],
+                        child: ListView.builder(
+                          padding: EdgeInsets.all(isTablet ? 16.0 : 8.0),
+                          itemCount: _items.length,
+                          itemBuilder: (context, index) {
+                            return Card(
+                              elevation: 2,
+                              margin: EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              color: themeProvider.isDarkMode
+                                  ? Colors.grey[800]
+                                  : Colors.white,
+                              child: ItemListTile(
+                                itemName: _items[index].name,
+                                onDelete: () => _removeItem(index),
+                                onTap: () =>
+                                    _navigateToDetailScreen(_items[index].name),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              floatingActionButton: FloatingActionButton(
+                backgroundColor: Colors.amber,
+                shape: CircleBorder(),
+                onPressed: _showAddItemDialog,
+                child: Icon(Icons.add, size: 28),
+                tooltip: 'اضافه کردن آیتم جدید',
+                elevation: 6,
+              ),
+            );
+          },
+    );
+  }
+}

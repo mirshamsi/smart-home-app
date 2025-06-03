@@ -1,41 +1,41 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'device.dart';
+part of 'shedule_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class DeviceAdapter extends TypeAdapter<Device> {
+class ScheduleModelAdapter extends TypeAdapter<ScheduleModel> {
   @override
-  final int typeId = 0;
+  final int typeId = 3;
 
   @override
-  Device read(BinaryReader reader) {
+  ScheduleModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return Device(
-      id: fields[0] as String,
-      name: fields[1] as String,
-      status: fields[2] as bool,
-      relayCount: fields[3] as int,
+    return ScheduleModel(
+      onTime: fields[0] as TimeOfDay?,
+      offTime: fields[1] as TimeOfDay?,
+      onTriggered: fields[2] as bool,
+      offTriggered: fields[3] as bool,
     );
   }
 
   @override
-  void write(BinaryWriter writer, Device obj) {
+  void write(BinaryWriter writer, ScheduleModel obj) {
     writer
       ..writeByte(4)
       ..writeByte(0)
-      ..write(obj.id)
+      ..write(obj.onTime)
       ..writeByte(1)
-      ..write(obj.name)
+      ..write(obj.offTime)
       ..writeByte(2)
-      ..write(obj.status)
+      ..write(obj.onTriggered)
       ..writeByte(3)
-      ..write(obj.relayCount);
+      ..write(obj.offTriggered);
   }
 
   @override
@@ -44,7 +44,7 @@ class DeviceAdapter extends TypeAdapter<Device> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is DeviceAdapter &&
+      other is ScheduleModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
