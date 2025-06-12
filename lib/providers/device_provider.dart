@@ -4,13 +4,13 @@ import 'package:topaz/models/device_model.dart';
 
 class DeviceProvider with ChangeNotifier {
   Map<String, List<DeviceModel>> _devicesByItem = {};
-  Map<String, Map<int, bool>> _buttonStates = {};
+  Map<String, Map<int, String>> _buttonStates = {};
   Map<String, Map<int, int>> _lastPacketNumbers = {};
 
   List<Map<String, String>> getDevices(String itemName) =>
       _devicesByItem[itemName]?.map((device) => device.toMap()).toList() ?? [];
 
-  Map<int, bool> getButtonStates(String deviceId) =>
+  Map<int, String> getButtonStates(String deviceId) =>
       _buttonStates[deviceId] ?? {};
 
   int getTotalDevices() =>
@@ -18,17 +18,30 @@ class DeviceProvider with ChangeNotifier {
 
   void syncStateFromMessage(String message, String deviceId) {
     try {
-      RegExp regex = RegExp(r"#(\d)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
+      RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
       Match? match = regex.firstMatch(message);
 
-      if (match != null && match.group(4) == deviceId) {
-        bool newState = match.group(1) == "1";
-        int relayNumber = int.parse(match.group(2)!);
-        updateButtonState(deviceId, relayNumber, newState);
+      if (match != null && match.group(5) == deviceId) {
+        String stateString = match.group(1)!; // e.g., "1001" for 4-pole
+        updateButtonStatesFromString(deviceId, stateString);
       }
     } catch (e) {
       debugPrint("Error parsing message: $e");
     }
+  }
+
+  void updateButtonStatesFromString(String deviceId, String stateString) {
+    _buttonStates[deviceId] ??= {};
+    for (int i = 0; i < stateString.length; i++) {
+      int relayNumber = i + 1;
+      String state =
+          stateString[stateString.length -
+              1 -
+              i]; // Reverse to match poles (1st digit = relay 1)
+      _buttonStates[deviceId]![relayNumber] = state; // Store "0" or "1"
+    }
+    _saveButtonStatesToHive(deviceId);
+    notifyListeners();
   }
 
   void addDevice(Map<String, String> device, String itemName) {
@@ -45,9 +58,9 @@ class DeviceProvider with ChangeNotifier {
     }
   }
 
-  void updateButtonState(String deviceId, int relayNumber, bool state) {
+  void updateButtonState(String deviceId, int relayNumber, String state) {
     _buttonStates[deviceId] ??= {};
-    _buttonStates[deviceId]![relayNumber] = state;
+    _buttonStates[deviceId]![relayNumber] = state; // Store "0" or "1"
     _saveButtonStatesToHive(deviceId);
     notifyListeners();
   }
@@ -133,5 +146,53 @@ class DeviceProvider with ChangeNotifier {
           ),
         )
         .toMap();
+  }
+}
+
+class ButtonStateModel {
+  final String deviceId;
+  final Map<int, String> states;
+
+  ButtonStateModel({required this.deviceId, required this.states});
+
+  Map<String, dynamic> toJson() {
+    return {
+      'deviceId': deviceId,
+      'states': states.map((key, value) => MapEntry(key.toString(), value)),
+    };
+  }
+
+  factory ButtonStateModel.fromJson(Map<String, dynamic> json) {
+    return ButtonStateModel(
+      deviceId: json['deviceId'],
+      states: (json['states'] as Map<String, dynamic>).map(
+        (key, value) => MapEntry(int.parse(key), value.toString()),
+      ),
+    );
+  }
+}
+
+class PacketNumberModel {
+  final String deviceId;
+  final Map<int, int> packetNumbers;
+
+  PacketNumberModel({required this.deviceId, required this.packetNumbers});
+
+  Map<String, dynamic> toJson() {
+    return {
+      'deviceId': deviceId,
+      'packetNumbers': packetNumbers.map(
+        (key, value) => MapEntry(key.toString(), value),
+      ),
+    };
+  }
+
+  factory PacketNumberModel.fromJson(Map<String, dynamic> json) {
+    return PacketNumberModel(
+      deviceId: json['deviceId'],
+      packetNumbers: (json['packetNumbers'] as Map<String, dynamic>).map(
+        (key, value) => MapEntry(int.parse(key), value as int),
+      ),
+    );
   }
 }

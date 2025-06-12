@@ -64,10 +64,9 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       if (endIndex != -1) {
         int startIndex = receivedBytesBuffer.lastIndexOf(0x23, endIndex);
         if (startIndex != -1) {
-          String message =
-              utf8
-                  .decode(receivedBytesBuffer.sublist(startIndex, endIndex + 1))
-                  .trim();
+          String message = utf8
+              .decode(receivedBytesBuffer.sublist(startIndex, endIndex + 1))
+              .trim();
           receivedBytesBuffer.removeRange(0, endIndex + 1);
           debugPrint("پیام دریافتی (TabScreen): $message");
           setState(() {
@@ -202,7 +201,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         Provider.of<DeviceProvider>(
           context,
           listen: false,
-        ).updateButtonState(receivedDeviceId, relayNumber, newState);
+        ).updateButtonStatesFromString(receivedDeviceId, stateCode);
         debugPrint(
           "وضعیت تاچ به‌روزرسانی شد: $receivedDeviceId, رله $relayNumber, حالت $newState",
         );
@@ -215,70 +214,71 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
   }
 
   void _processReceivedMessageForReceiver(String message) {
-    RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D(\d+)E(\d+)F");
+    RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
     Match? match = regex.firstMatch(message);
     if (match != null) {
       String stateCode = match.group(1)!;
       String deviceInfo = match.group(3)!;
       String receivedDeviceId = match.group(4)!;
 
-      // Check if device already exists to prevent duplicates
+      // Check if device already exists
       bool deviceExists = Provider.of<DeviceProvider>(context, listen: false)
           .getDevices(widget.itemName)
           .any((device) => device["deviceId"] == receivedDeviceId);
 
-      if (!deviceExists) {
-        String deviceName;
-        String deviceImage;
-        Map<String, String> deviceData;
-        if (deviceInfo == "12") {
-          deviceName = "گاز";
-          deviceImage = "assets/sensor-gaz.png";
-          deviceData = {
-            "name": deviceName,
-            "deviceId":
-                receivedDeviceId, // Use receivedDeviceId instead of stateCode
-            "image": deviceImage,
-            "deviceInfo": deviceInfo,
-          };
-        } else {
-          int poleCount = 0;
-          switch (deviceInfo) {
-            case "64":
-              deviceName = "کلید لمسی 4 پل";
-              deviceImage = "assets/4-pol.png";
-              poleCount = 4;
-              break;
-            case "63":
-              deviceName = "کلید لمسی 3 پل";
-              deviceImage = "assets/3-pol.png";
-              poleCount = 3;
-              break;
-            case "62":
-              deviceName = "کلید لمسی 2 پل";
-              deviceImage = "assets/2-pol.png";
-              poleCount = 2;
-              break;
-            case "61":
-              deviceName = "کلید لمسی 1 پل";
-              deviceImage = "assets/1-pol.png";
-              poleCount = 1;
-              break;
-            default:
-              deviceName = "دستگاه ناشناخته";
-              deviceImage = "assets/1-pol.png";
-              poleCount = 1;
-              break;
-          }
-          deviceData = {
-            "name": deviceName,
-            "deviceId": receivedDeviceId,
-            "image": deviceImage,
-            "poleCount": poleCount.toString(),
-            "deviceInfo": deviceInfo,
-          };
-        }
+      String deviceName;
+      String deviceImage;
+      Map<String, String> deviceData;
+      int poleCount = 0;
 
+      if (deviceInfo == "12") {
+        deviceName = "گاز";
+        deviceImage = "assets/sensor-gaz.png";
+        deviceData = {
+          "name": deviceName,
+          "deviceId": receivedDeviceId,
+          "image": deviceImage,
+          "deviceInfo": deviceInfo,
+        };
+      } else {
+        switch (deviceInfo) {
+          case "64":
+            deviceName = "کلید لمسی 4 پل";
+            deviceImage = "assets/4-pol.png";
+            poleCount = 4;
+            break;
+          case "63":
+            deviceName = "کلید لمسی 3 پل";
+            deviceImage = "assets/3-pol.png";
+            poleCount = 3;
+            break;
+          case "62":
+            deviceName = "کلید لمسی 2 پل";
+            deviceImage = "assets/2-pol.png";
+            poleCount = 2;
+            break;
+          case "61":
+            deviceName = "کلید لمسی 1 پل";
+            deviceImage = "assets/1-pol.png";
+            poleCount = 1;
+            break;
+          default:
+            deviceName = "دستگاه ناشناخته";
+            deviceImage = "assets/1-pol.png";
+            poleCount = 1;
+            break;
+        }
+        deviceData = {
+          "name": deviceName,
+          "deviceId": receivedDeviceId,
+          "image": deviceImage,
+          "poleCount": poleCount.toString(),
+          "deviceInfo": deviceInfo,
+        };
+      }
+
+      // اگر دستگاه وجود ندارد، آن را اضافه کن
+      if (!deviceExists) {
         setState(() {
           deviceId = receivedDeviceId;
           Provider.of<DeviceProvider>(
@@ -286,11 +286,22 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             listen: false,
           ).addDevice(deviceData, widget.itemName);
           debugPrint(
-            "Device added: $deviceName with ID ${deviceData["deviceId"]}",
+            "Device added in receiving mode: $deviceName with ID ${deviceData["deviceId"]}",
           );
         });
       } else {
         debugPrint("Device with ID $receivedDeviceId already exists.");
+      }
+
+      // در هر صورت، اگر دستگاه کلید است، وضعیت دکمه‌هایش را به‌روزرسانی کن
+      if (deviceInfo != "12") {
+        Provider.of<DeviceProvider>(
+          context,
+          listen: false,
+        ).updateButtonStatesFromString(receivedDeviceId, stateCode);
+        debugPrint(
+          "وضعیت تاچ‌ها به‌روزرسانی شد: $receivedDeviceId, حالت‌ها $stateCode",
+        );
       }
     }
   }
@@ -386,8 +397,9 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             color: Colors.black,
           ),
         ),
-        backgroundColor:
-            themeProvider.isDarkMode ? Colors.grey[900] : Colors.amber[700],
+        backgroundColor: themeProvider.isDarkMode
+            ? Colors.grey[900]
+            : Colors.amber[700],
         actions: [
           IconButton(
             icon: Icon(
@@ -416,187 +428,175 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             onSelected: (String value) {
               if (value == 'toggle_theme') _toggleDarkMode();
             },
-            itemBuilder:
-                (BuildContext context) => [
-                  PopupMenuItem<String>(
-                    value: 'toggle_theme',
-                    child: Row(
-                      children: [
-                        Icon(
-                          themeProvider.isDarkMode
-                              ? Icons.light_mode
-                              : Icons.dark_mode,
-                          color:
-                              themeProvider.isDarkMode
-                                  ? Colors.yellow[300]
-                                  : Colors.yellow[800],
-                        ),
-                        SizedBox(width: isTablet ? 10 : 8),
-                        Text(
-                          themeProvider.isDarkMode ? 'حالت روشن' : 'حالت تاریک',
-                        ),
-                      ],
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'toggle_theme',
+                child: Row(
+                  children: [
+                    Icon(
+                      themeProvider.isDarkMode
+                          ? Icons.light_mode
+                          : Icons.dark_mode,
+                      color: themeProvider.isDarkMode
+                          ? Colors.yellow[300]
+                          : Colors.yellow[800],
                     ),
-                  ),
-                ],
+                    SizedBox(width: isTablet ? 10 : 8),
+                    Text(themeProvider.isDarkMode ? 'حالت روشن' : 'حالت تاریک'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
       body: SafeArea(
-        child:
-            deviceProvider.getDevices(widget.itemName).isEmpty
-                ? Center(
-                  child: AnimatedOpacity(
-                    opacity: 1.0,
-                    duration: const Duration(milliseconds: 500),
-                    child: Container(
-                      padding: const EdgeInsets.all(24.0),
-                      decoration: BoxDecoration(
-                        color:
-                            themeProvider.isDarkMode
-                                ? Colors.grey[850]
-                                : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(16.0),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 8.0,
-                            offset: Offset(0, 2),
+        child: deviceProvider.getDevices(widget.itemName).isEmpty
+            ? Center(
+                child: AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Container(
+                    padding: const EdgeInsets.all(24.0),
+                    decoration: BoxDecoration(
+                      color: themeProvider.isDarkMode
+                          ? Colors.grey[850]
+                          : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(16.0),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 8.0,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.device_unknown,
+                          size: 60,
+                          color: themeProvider.isDarkMode
+                              ? Colors.yellow[300]
+                              : Colors.yellow[800],
+                        ),
+                        const SizedBox(height: 16.0),
+                        Text(
+                          "هیچ دستگاهی یافت نشد",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: themeProvider.isDarkMode
+                                ? Colors.yellow[300]
+                                : Colors.yellow[800],
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.device_unknown,
-                            size: 60,
-                            color:
-                                themeProvider.isDarkMode
-                                    ? Colors.yellow[300]
-                                    : Colors.yellow[800],
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8.0),
+                        Text(
+                          "لطفاً دستگاه را متصل کنید یا دوباره تلاش کنید",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[500]
+                                : Colors.grey[700],
                           ),
-                          const SizedBox(height: 16.0),
-                          Text(
-                            "هیچ دستگاهی یافت نشد",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color:
-                                  themeProvider.isDarkMode
-                                      ? Colors.yellow[300]
-                                      : Colors.yellow[800],
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : GridView.builder(
+                padding: const EdgeInsets.all(16.0),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _getCrossAxisCount(context),
+                  crossAxisSpacing: 12.0,
+                  mainAxisSpacing: 12.0,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: deviceProvider.getDevices(widget.itemName).length,
+                itemBuilder: (context, index) {
+                  final device = deviceProvider.getDevices(
+                    widget.itemName,
+                  )[index];
+                  return GestureDetector(
+                    onTap: () {
+                      if (device["deviceInfo"] == "12") {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GasSensorPage(
+                              deviceId: device["deviceId"]!,
+                              deviceName: device["name"]!,
                             ),
-                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ManageDevice(
+                              deviceId: device["deviceId"]!,
+                              itemName: widget.itemName,
+                              deviceInfo: device["deviceInfo"]!,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    child: Card(
+                      elevation: 4.0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16.0),
+                      ),
+                      color: themeProvider.isDarkMode
+                          ? Colors.grey[800]
+                          : Colors.white,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            device["image"]!,
+                            height: isTablet ? 80 : 60,
+                            fit: BoxFit.contain,
                           ),
                           const SizedBox(height: 8.0),
                           Text(
-                            "لطفاً دستگاه را متصل کنید یا دوباره تلاش کنید",
+                            device["name"]!,
                             style: TextStyle(
-                              fontSize: 14,
-                              color:
-                                  themeProvider.isDarkMode
-                                      ? Colors.grey[500]
-                                      : Colors.grey[700],
+                              fontSize: isTablet ? 18 : 14,
+                              fontWeight: FontWeight.bold,
+                              color: themeProvider.isDarkMode
+                                  ? Colors.grey[200]
+                                  : Colors.grey[900],
                             ),
                             textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 4.0),
+                          Text(
+                            device["deviceId"]!,
+                            style: TextStyle(
+                              fontSize: isTablet ? 14 : 12,
+                              color: themeProvider.isDarkMode
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                )
-                : GridView.builder(
-                  padding: const EdgeInsets.all(16.0),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _getCrossAxisCount(context),
-                    crossAxisSpacing: 12.0,
-                    mainAxisSpacing: 12.0,
-                    childAspectRatio: 1.0,
-                  ),
-                  itemCount: deviceProvider.getDevices(widget.itemName).length,
-                  itemBuilder: (context, index) {
-                    final device =
-                        deviceProvider.getDevices(widget.itemName)[index];
-                    return GestureDetector(
-                      onTap: () {
-                        if (device["deviceInfo"] == "12") {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => GasSensorPage(
-                                    deviceId: device["deviceId"]!,
-                                    deviceName: device["name"]!,
-                                  ),
-                            ),
-                          );
-                        } else {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => ManageDevice(
-                                    deviceId: device["deviceId"]!,
-                                    itemName: widget.itemName,
-                                    deviceInfo: device["deviceInfo"]!,
-                                  ),
-                            ),
-                          );
-                        }
-                      },
-                      child: Card(
-                        elevation: 4.0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        color:
-                            themeProvider.isDarkMode
-                                ? Colors.grey[800]
-                                : Colors.white,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Image.asset(
-                              device["image"]!,
-                              height: isTablet ? 80 : 60,
-                              fit: BoxFit.contain,
-                            ),
-                            const SizedBox(height: 8.0),
-                            Text(
-                              device["name"]!,
-                              style: TextStyle(
-                                fontSize: isTablet ? 18 : 14,
-                                fontWeight: FontWeight.bold,
-                                color:
-                                    themeProvider.isDarkMode
-                                        ? Colors.grey[200]
-                                        : Colors.grey[900],
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 4.0),
-                            Text(
-                              device["deviceId"]!,
-                              style: TextStyle(
-                                fontSize: isTablet ? 14 : 12,
-                                color:
-                                    themeProvider.isDarkMode
-                                        ? Colors.grey[400]
-                                        : Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                  );
+                },
+              ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isLearning || _isReceiving ? null : _sendLearnCommand,
-        backgroundColor:
-            _isLearning || _isReceiving ? Colors.grey : Colors.amber,
+        backgroundColor: _isLearning || _isReceiving
+            ? Colors.grey
+            : Colors.amber,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12.0),
         ),
@@ -659,22 +659,25 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             color: Colors.white,
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12.0),
-          ),
-          elevation: 6,
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.black26,
-          foregroundColor: Colors.white.withOpacity(0.9),
-        ).copyWith(
-          backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
-            if (states.contains(MaterialState.pressed))
-              return gradient.colors[1].withOpacity(0.8);
-            return Colors.transparent;
-          }),
-        ),
+        style:
+            ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.0),
+              ),
+              elevation: 6,
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.black26,
+              foregroundColor: Colors.white.withOpacity(0.9),
+            ).copyWith(
+              backgroundColor: MaterialStateProperty.resolveWith<Color>((
+                states,
+              ) {
+                if (states.contains(MaterialState.pressed))
+                  return gradient.colors[1].withOpacity(0.8);
+                return Colors.transparent;
+              }),
+            ),
       ),
       decoration: BoxDecoration(
         gradient: gradient,

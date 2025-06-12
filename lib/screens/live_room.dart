@@ -201,7 +201,7 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
       Provider.of<DeviceProvider>(
         context,
         listen: false,
-      ).updateButtonState(receivedDeviceId, relayNumber, newState);
+      ).updateButtonStatesFromString(receivedDeviceId, stateCode);
       debugPrint(
         "وضعیت تاچ به‌روزرسانی شد: $receivedDeviceId, رله $relayNumber, حالت $newState",
       );
@@ -224,135 +224,22 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
             final bool isTablet = MediaQuery.of(context).size.width > 600;
 
             return Scaffold(
+              appBar: AppBar(
+                title: Text(
+                  "محل نصب دستگاه",
+                  style: TextStyle(
+                    fontSize: isTablet ? 30 : 20,
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                backgroundColor: themeProvider.isDarkMode
+                    ? Colors.grey[900]
+                    : Colors.amber[700],
+              ),
               body: SafeArea(
                 child: Column(
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: themeProvider.isDarkMode
-                              ? [Colors.grey[900]!, Colors.grey[800]!]
-                              : [Colors.amber[700]!, Colors.amber[400]!],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isTablet ? 24.0 : 16.0,
-                        vertical: 16.0,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                "محل نصب دستگاه",
-                                style: TextStyle(
-                                  fontSize: isTablet ? 30 : 20,
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              AnimatedContainer(
-                                duration: Duration(milliseconds: 300),
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: connectionProvider.isConnected
-                                      ? Colors.green.withOpacity(0.2)
-                                      : Colors.red.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: connectionProvider.isConnected
-                                        ? Colors.green
-                                        : Colors.red,
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      connectionProvider.isConnected
-                                          ? Icons.check_circle
-                                          : Icons.error,
-                                      size: isTablet ? 20 : 16,
-                                      color: connectionProvider.isConnected
-                                          ? Colors.green
-                                          : Colors.red,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      connectionProvider.isConnected
-                                          ? 'متصل'
-                                          : 'قطع شده',
-                                      style: TextStyle(
-                                        fontSize: isTablet ? 16 : 14,
-                                        color: connectionProvider.isConnected
-                                            ? Colors.green
-                                            : Colors.red,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  Icons.settings,
-                                  color: Colors.grey[800],
-                                  size: isTablet ? 28 : 24,
-                                ),
-                                onPressed: () {},
-                              ),
-                              PopupMenuButton<String>(
-                                icon: Icon(
-                                  themeProvider.isDarkMode
-                                      ? Icons.light_mode
-                                      : Icons.dark_mode,
-                                  color: Colors.white,
-                                  size: isTablet ? 28 : 24,
-                                ),
-                                onSelected: (String value) {
-                                  if (value == 'toggle_theme')
-                                    _toggleDarkMode();
-                                },
-                                itemBuilder: (BuildContext context) => [
-                                  PopupMenuItem<String>(
-                                    value: 'toggle_theme',
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          themeProvider.isDarkMode
-                                              ? Icons.light_mode
-                                              : Icons.dark_mode,
-                                          color: themeProvider.isDarkMode
-                                              ? Colors.yellow[300]
-                                              : Colors.yellow[800],
-                                        ),
-                                        SizedBox(width: isTablet ? 10 : 8),
-                                        Text(
-                                          themeProvider.isDarkMode
-                                              ? 'حالت روشن'
-                                              : 'حالت تاریک',
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                     Expanded(
                       child: Container(
                         color: themeProvider.isDarkMode

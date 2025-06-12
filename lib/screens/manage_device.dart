@@ -39,7 +39,6 @@ class _ManageDeviceState extends State<ManageDevice>
   List mySmartDevices = [];
   StreamSubscription? _serialSubscription;
   bool _isSending = false;
-  Timer? _statusQueryTimer;
   Timer? _scheduleCheckerTimer;
 
   @override
@@ -53,13 +52,74 @@ class _ManageDeviceState extends State<ManageDevice>
     await loadSchedules();
     await _reconnectIfNeeded();
     _startScheduleChecker();
-    _startStatusQuery();
+    await _requestSwitchStatus(); // Send command once on page entry
 
     final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
     await deviceProvider.loadButtonStatesFromHive(widget.deviceId);
     await deviceProvider.loadPacketNumbersFromHive(widget.deviceId);
     _updateSmartDevices(deviceProvider);
     _setupSerialListener();
+  }
+
+  Future<void> _requestSwitchStatus() async {
+    if (_isSending ||
+        !Provider.of<ConnectionProvider>(context, listen: false).isConnected) {
+      return;
+    }
+
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      final deviceProvider = Provider.of<DeviceProvider>(
+        context,
+        listen: false,
+      );
+      int lastPacketNumber = deviceProvider.getLastPacketNumber(
+        widget.deviceId,
+        0,
+      );
+      int newPacketNumber = (lastPacketNumber + 1) % 10000;
+      String command = "#3A0B7C7D${widget.deviceId}E${newPacketNumber}F\n";
+      debugPrint("دستور ارسالی برای وضعیت: $command");
+
+      bool isMessageSent = await _serialService
+          .write(command)
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              debugPrint("مهلت زمانی ارسال دستور به پایان رسید.");
+              return false;
+            },
+          );
+
+      if (isMessageSent) {
+        debugPrint("دستور وضعیت با موفقیت ارسال شد");
+        deviceProvider.updateLastPacketNumber(
+          widget.deviceId,
+          0,
+          newPacketNumber,
+        );
+        setState(() {
+          sentMessages.add(command.trim());
+          if (sentMessages.length > 10) sentMessages.removeAt(0);
+        });
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("ارسال دستور ناموفق بود")));
+      }
+    } catch (e) {
+      debugPrint("خطای غیرمنتظره در ارسال دستور: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("خطای غیرمنتظره: $e")));
+    } finally {
+      setState(() {
+        _isSending = false;
+      });
+    }
   }
 
   void _updateSmartDevices(DeviceProvider deviceProvider) {
@@ -75,23 +135,13 @@ class _ManageDeviceState extends State<ManageDevice>
           (index) => [
             "رله ${index + 1}",
             "assets/lightbulb.png",
-            deviceProvider.getButtonStates(widget.deviceId)[index + 1] ?? false,
+            (deviceProvider.getButtonStates(widget.deviceId)[index + 1] ??
+                    "0") ==
+                "1",
           ],
         );
       });
     }
-  }
-
-  void _startStatusQuery() {
-    _statusQueryTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
-      if (!_isSending &&
-          Provider.of<ConnectionProvider>(context, listen: false).isConnected) {
-        for (int relay = 1; relay <= mySmartDevices.length; relay++) {
-          String queryCommand = "#2A${relay}B7C7D${widget.deviceId}E0F\n";
-          await _serialService.write(queryCommand);
-        }
-      }
-    });
   }
 
   void _startScheduleChecker() {
@@ -111,8 +161,8 @@ class _ManageDeviceState extends State<ManageDevice>
           now.hour == schedule.onTime!.hour &&
           now.minute == schedule.onTime!.minute &&
           !schedule.onTriggered) {
-        if (!(deviceProvider.getButtonStates(widget.deviceId)[relay] ??
-            false)) {
+        if ((deviceProvider.getButtonStates(widget.deviceId)[relay] ?? "0") ==
+            "0") {
           _toggleCommand(relay, true);
         }
         setState(() {
@@ -134,7 +184,8 @@ class _ManageDeviceState extends State<ManageDevice>
           now.hour == schedule.offTime!.hour &&
           now.minute == schedule.offTime!.minute &&
           !schedule.offTriggered) {
-        if (deviceProvider.getButtonStates(widget.deviceId)[relay] ?? false) {
+        if ((deviceProvider.getButtonStates(widget.deviceId)[relay] ?? "0") ==
+            "1") {
           _toggleCommand(relay, false);
         }
         setState(() {
@@ -233,20 +284,27 @@ class _ManageDeviceState extends State<ManageDevice>
   }
 
   void _processReceivedMessage(String message) {
-    RegExp regex = RegExp(r"#(\d)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
+    RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
     Match? match = regex.firstMatch(message);
     if (match != null && match.group(4) == widget.deviceId) {
-      bool newState = match.group(1) == "1";
-      int relayNumber = int.parse(match.group(2)!);
-      debugPrint("پیام پردازش شد: رله $relayNumber به $newState تغییر کرد");
+      String stateString = match.group(1)!; // e.g., "1001"
+      debugPrint("پیام پردازش شد: وضعیت تاچ‌ها $stateString");
 
       Provider.of<DeviceProvider>(
         context,
         listen: false,
-      ).updateButtonState(widget.deviceId, relayNumber, newState);
+      ).updateButtonStatesFromString(widget.deviceId, stateString);
 
       setState(() {
-        mySmartDevices[relayNumber - 1][2] = newState;
+        final deviceProvider = Provider.of<DeviceProvider>(
+          context,
+          listen: false,
+        );
+        for (int i = 0; i < mySmartDevices.length; i++) {
+          mySmartDevices[i][2] =
+              (deviceProvider.getButtonStates(widget.deviceId)[i + 1] ?? "0") ==
+              "1";
+        }
       });
     } else {
       debugPrint("پیام نامعتبر یا deviceId مطابقت ندارد: $message");
@@ -316,7 +374,7 @@ class _ManageDeviceState extends State<ManageDevice>
           deviceProvider.updateButtonState(
             widget.deviceId,
             relayNumber,
-            newValue,
+            newValue ? "1" : "0",
           );
           mySmartDevices[relayNumber - 1][2] = newValue;
 
@@ -597,7 +655,6 @@ class _ManageDeviceState extends State<ManageDevice>
   @override
   void dispose() {
     _serialSubscription?.cancel();
-    _statusQueryTimer?.cancel();
     _scheduleCheckerTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

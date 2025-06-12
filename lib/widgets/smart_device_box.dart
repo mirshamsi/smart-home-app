@@ -49,8 +49,8 @@ class _SmartDeviceBoxState extends State<SmartDeviceBox> {
   void _updateDecoration(bool currentState) {
     _cachedDecoration = BoxDecoration(
       borderRadius: BorderRadius.circular(24),
-      color: currentState 
-          ? Colors.grey[900] 
+      color: currentState
+          ? Colors.grey[900]
           : const Color.fromARGB(44, 164, 167, 189),
     );
   }
@@ -60,8 +60,14 @@ class _SmartDeviceBoxState extends State<SmartDeviceBox> {
     // Using Consumer to optimize rebuilds - only rebuilds when the specific device state changes
     return Consumer<DeviceProvider>(
       builder: (context, deviceProvider, child) {
-        final currentState = deviceProvider.getButtonStates(widget.deviceId)[widget.relayNumber] ?? false;
-        
+        // Read the state as String and convert to bool
+        final String stateString =
+            deviceProvider.getButtonStates(
+              widget.deviceId,
+            )[widget.relayNumber] ??
+            "0";
+        final bool currentState = stateString == "1";
+
         // Update decoration if state changed
         if (currentState != _lastState) {
           _lastState = currentState;
