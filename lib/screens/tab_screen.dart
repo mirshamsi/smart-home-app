@@ -150,6 +150,11 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         } else {
           int poleCount = 0;
           switch (deviceInfo) {
+            case "66":
+              deviceName = "کلید لمسی 6 پل";
+              deviceImage = "assets/6-pol.png";
+              poleCount = 6;
+            break;
             case "64":
               deviceName = "کلید لمسی 4 پل";
               deviceImage = "assets/4-pol.png";
@@ -242,6 +247,11 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         };
       } else {
         switch (deviceInfo) {
+          case "66":
+            deviceName = "کلید لمسی 6 پل";
+            deviceImage = "assets/6-pol.png";
+            poleCount = 6;
+            break;
           case "64":
             deviceName = "کلید لمسی 4 پل";
             deviceImage = "assets/4-pol.png";

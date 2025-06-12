@@ -22,7 +22,7 @@ class DeviceProvider with ChangeNotifier {
       Match? match = regex.firstMatch(message);
 
       if (match != null && match.group(5) == deviceId) {
-        String stateString = match.group(1)!; // e.g., "1001" for 4-pole
+        String stateString = match.group(1)!; 
         updateButtonStatesFromString(deviceId, stateString);
       }
     } catch (e) {

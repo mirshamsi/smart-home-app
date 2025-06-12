@@ -133,7 +133,7 @@ class _ManageDeviceState extends State<ManageDevice>
         mySmartDevices = List.generate(
           poleCount,
           (index) => [
-            "رله ${index + 1}",
+            "تاچ ${index + 1}",
             "assets/lightbulb.png",
             (deviceProvider.getButtonStates(widget.deviceId)[index + 1] ??
                     "0") ==
@@ -287,7 +287,7 @@ class _ManageDeviceState extends State<ManageDevice>
     RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
     Match? match = regex.firstMatch(message);
     if (match != null && match.group(4) == widget.deviceId) {
-      String stateString = match.group(1)!; // e.g., "1001"
+      String stateString = match.group(1)!; 
       debugPrint("پیام پردازش شد: وضعیت تاچ‌ها $stateString");
 
       Provider.of<DeviceProvider>(
