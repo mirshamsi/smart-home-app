@@ -154,7 +154,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
               deviceName = "کلید لمسی 6 پل";
               deviceImage = "assets/6-pol.png";
               poleCount = 6;
-            break;
+              break;
             case "64":
               deviceName = "کلید لمسی 4 پل";
               deviceImage = "assets/4-pol.png";
@@ -378,6 +378,12 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
     debugPrint("Is TRANS Command Sent: $isMessageSent");
   }
 
+  _sendClearCommand() async {
+    String command = "CLEAR\r";
+    bool isMessageSent = await _serialService.write(command);
+    debugPrint("Is CLEAR Command Sent: $isMessageSent");
+  }
+
   void _toggleDarkMode() {
     Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
   }
@@ -429,35 +435,44 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             tooltip: 'فرستنده',
             onPressed: _sendTransCommand,
           ),
-          PopupMenuButton<String>(
+          IconButton(
             icon: Icon(
-              themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+              Icons.restore_from_trash,
               color: Colors.white,
               size: isTablet ? 28 : 24,
             ),
-            onSelected: (String value) {
-              if (value == 'toggle_theme') _toggleDarkMode();
-            },
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
-                value: 'toggle_theme',
-                child: Row(
-                  children: [
-                    Icon(
-                      themeProvider.isDarkMode
-                          ? Icons.light_mode
-                          : Icons.dark_mode,
-                      color: themeProvider.isDarkMode
-                          ? Colors.yellow[300]
-                          : Colors.yellow[800],
-                    ),
-                    SizedBox(width: isTablet ? 10 : 8),
-                    Text(themeProvider.isDarkMode ? 'حالت روشن' : 'حالت تاریک'),
-                  ],
-                ),
-              ),
-            ],
+            tooltip: 'پاک کردن',
+            onPressed: _sendClearCommand,
           ),
+          // PopupMenuButton<String>(
+          //   icon: Icon(
+          //     themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+          //     color: Colors.white,
+          //     size: isTablet ? 28 : 24,
+          //   ),
+          //   onSelected: (String value) {
+          //     if (value == 'toggle_theme') _toggleDarkMode();
+          //   },
+          //   itemBuilder: (BuildContext context) => [
+          //     PopupMenuItem<String>(
+          //       value: 'toggle_theme',
+          //       child: Row(
+          //         children: [
+          //           Icon(
+          //             themeProvider.isDarkMode
+          //                 ? Icons.light_mode
+          //                 : Icons.dark_mode,
+          //             color: themeProvider.isDarkMode
+          //                 ? Colors.yellow[300]
+          //                 : Colors.yellow[800],
+          //           ),
+          //           SizedBox(width: isTablet ? 10 : 8),
+          //           Text(themeProvider.isDarkMode ? 'حالت روشن' : 'حالت تاریک'),
+          //         ],
+          //       ),
+          //     ),
+          //   ],
+          // ),
         ],
       ),
       body: SafeArea(

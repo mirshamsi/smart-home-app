@@ -232,7 +232,6 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
                   "محل نصب دستگاه",
                   style: TextStyle(
                     fontSize: isTablet ? 30 : 20,
-                    color: Colors.black,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -245,9 +244,6 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
                   children: [
                     Expanded(
                       child: Container(
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[850]
-                            : Colors.grey[100],
                         child: ListView.builder(
                           padding: EdgeInsets.all(isTablet ? 16.0 : 8.0),
                           itemCount: _items.length,
