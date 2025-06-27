@@ -11,10 +11,14 @@ class ScenariosScreen extends StatelessWidget {
     final isTablet = MediaQuery.of(context).size.width > 600;
 
     return Scaffold(
+      backgroundColor: themeProvider.isDarkMode
+          ? Colors.black12
+          : Colors.grey[200],
       appBar: AppBar(
         title: const Text('سناریوها'),
-        backgroundColor:
-            themeProvider.isDarkMode ? Colors.grey[900] : Colors.amber[700],
+        backgroundColor: themeProvider.isDarkMode
+            ? Colors.grey[900]
+            : Colors.amber[700],
       ),
       body: SafeArea(
         child: Padding(
@@ -27,10 +31,9 @@ class ScenariosScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: isTablet ? 28 : 24,
                   fontWeight: FontWeight.bold,
-                  color:
-                      themeProvider.isDarkMode
-                          ? Colors.grey[300]
-                          : Colors.grey[900],
+                  color: themeProvider.isDarkMode
+                      ? Colors.grey[300]
+                      : Colors.grey[900],
                 ),
               ),
               const SizedBox(height: 20),
@@ -40,10 +43,9 @@ class ScenariosScreen extends StatelessWidget {
                     'در حال حاضر هیچ سناریویی تعریف نشده است.',
                     style: TextStyle(
                       fontSize: isTablet ? 18 : 16,
-                      color:
-                          themeProvider.isDarkMode
-                              ? Colors.grey[400]
-                              : Colors.grey[700],
+                      color: themeProvider.isDarkMode
+                          ? Colors.grey[400]
+                          : Colors.grey[700],
                     ),
                   ),
                 ),
@@ -61,8 +63,9 @@ class ScenariosScreen extends StatelessWidget {
             ),
           );
         },
-        backgroundColor:
-            themeProvider.isDarkMode ? Colors.yellow[700] : Colors.amber[700],
+        backgroundColor: themeProvider.isDarkMode
+            ? Colors.yellow[700]
+            : Colors.amber[700],
         child: const Icon(Icons.add),
       ),
     );

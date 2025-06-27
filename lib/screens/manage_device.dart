@@ -287,7 +287,7 @@ class _ManageDeviceState extends State<ManageDevice>
     RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
     Match? match = regex.firstMatch(message);
     if (match != null && match.group(4) == widget.deviceId) {
-      String stateString = match.group(1)!; 
+      String stateString = match.group(1)!;
       debugPrint("پیام پردازش شد: وضعیت تاچ‌ها $stateString");
 
       Provider.of<DeviceProvider>(
@@ -676,6 +676,9 @@ class _ManageDeviceState extends State<ManageDevice>
 
     if (poleCount == 0) {
       return Scaffold(
+        backgroundColor: themeProvider.isDarkMode
+            ? Colors.black12
+            : Colors.grey[200],
         appBar: AppBar(
           title: Text("مدیریت دستگاه ${widget.deviceId}"),
           backgroundColor: themeProvider.isDarkMode

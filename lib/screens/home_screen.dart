@@ -1045,29 +1045,84 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     return WithForegroundTask(
       child: Scaffold(
+        backgroundColor: themeProvider.isDarkMode
+            ? Colors.black12
+            : Colors.grey[200],
         body: _getSelectedScreen(),
-        bottomNavigationBar: BottomNavigationBar(
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'خانه'),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.devices),
-              label: 'اتاق کنترل',
+        bottomNavigationBar: Container(
+          margin: const EdgeInsets.only(
+            left: 10,
+            right: 10,
+            top: 2,
+            bottom: 15,
+          ),
+          decoration: BoxDecoration(
+            color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+              bottomLeft: Radius.circular(45),
+              bottomRight: Radius.circular(45),
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'تنظیمات',
-            ),
-            BottomNavigationBarItem(icon: Icon(Icons.rule), label: 'سناریوها'),
-          ],
-          currentIndex: _selectedIndex,
-          selectedItemColor: Theme.of(context).primaryColor,
-          unselectedItemColor: Colors.grey,
-          onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            items: const <BottomNavigationBarItem>[
+              BottomNavigationBarItem(
+                icon: _StyledNavIcon(icon: Icons.home),
+                label: 'خانه',
+              ),
+              BottomNavigationBarItem(
+                icon: _StyledNavIcon(icon: Icons.devices),
+                label: 'اتاق کنترل',
+              ),
+              BottomNavigationBarItem(
+                icon: _StyledNavIcon(icon: Icons.settings),
+                label: 'تنظیمات',
+              ),
+              BottomNavigationBarItem(
+                icon: _StyledNavIcon(icon: Icons.rule),
+                label: 'سناریوها',
+              ),
+            ],
+            currentIndex: _selectedIndex,
+            selectedItemColor: Colors.yellow[800],
+            selectedFontSize: 14,
+            unselectedItemColor: Colors.grey,
+            backgroundColor: Colors.transparent,
+            onTap: _onItemTapped,
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _StyledNavIcon extends StatelessWidget {
+  final IconData icon;
+
+  const _StyledNavIcon({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 4,
+      ), // فاصله چپ، راست، بالا و پایین
+      child: Icon(icon, size: 24), // آیکون
     );
   }
 }

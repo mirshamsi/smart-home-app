@@ -11,10 +11,14 @@ class SettingsScreen extends StatelessWidget {
     final isTablet = MediaQuery.of(context).size.width > 600;
 
     return Scaffold(
+      backgroundColor: themeProvider.isDarkMode
+          ? Colors.black12
+          : Colors.grey[200],
       appBar: AppBar(
         title: const Text('تنظیمات'),
-        backgroundColor:
-            themeProvider.isDarkMode ? Colors.grey[900] : Colors.amber[700],
+        backgroundColor: themeProvider.isDarkMode
+            ? Colors.grey[900]
+            : Colors.amber[700],
       ),
       body: SafeArea(
         child: Padding(
@@ -27,29 +31,26 @@ class SettingsScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: isTablet ? 28 : 24,
                   fontWeight: FontWeight.bold,
-                  color:
-                      themeProvider.isDarkMode
-                          ? Colors.grey[300]
-                          : Colors.grey[900],
+                  color: themeProvider.isDarkMode
+                      ? Colors.grey[300]
+                      : Colors.grey[900],
                 ),
               ),
               const SizedBox(height: 20),
               ListTile(
                 leading: Icon(
                   themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                  color:
-                      themeProvider.isDarkMode
-                          ? Colors.yellow[300]
-                          : Colors.yellow[800],
+                  color: themeProvider.isDarkMode
+                      ? Colors.yellow[300]
+                      : Colors.yellow[800],
                 ),
                 title: Text(
                   'حالت تاریک',
                   style: TextStyle(
                     fontSize: isTablet ? 18 : 16,
-                    color:
-                        themeProvider.isDarkMode
-                            ? Colors.grey[300]
-                            : Colors.grey[900],
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[300]
+                        : Colors.grey[900],
                   ),
                 ),
                 trailing: Switch(
@@ -64,19 +65,17 @@ class SettingsScreen extends StatelessWidget {
               ListTile(
                 leading: Icon(
                   Icons.language,
-                  color:
-                      themeProvider.isDarkMode
-                          ? Colors.yellow[300]
-                          : Colors.yellow[800],
+                  color: themeProvider.isDarkMode
+                      ? Colors.yellow[300]
+                      : Colors.yellow[800],
                 ),
                 title: Text(
                   'زبان',
                   style: TextStyle(
                     fontSize: isTablet ? 18 : 16,
-                    color:
-                        themeProvider.isDarkMode
-                            ? Colors.grey[300]
-                            : Colors.grey[900],
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[300]
+                        : Colors.grey[900],
                   ),
                 ),
                 subtitle: const Text('فارسی'),

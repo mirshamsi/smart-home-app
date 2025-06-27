@@ -224,6 +224,9 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
             final bool isTablet = MediaQuery.of(context).size.width > 600;
 
             return Scaffold(
+              backgroundColor: themeProvider.isDarkMode
+                  ? Colors.black12
+                  : Colors.grey[200],
               appBar: AppBar(
                 title: Text(
                   "محل نصب دستگاه",
