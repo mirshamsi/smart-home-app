@@ -288,12 +288,16 @@ class _ManageDeviceState extends State<ManageDevice>
     Match? match = regex.firstMatch(message);
     if (match != null && match.group(4) == widget.deviceId) {
       String stateString = match.group(1)!;
-      debugPrint("پیام پردازش شد: وضعیت تاچ‌ها $stateString");
+      // Convert stateString to binary
+      String binaryState = int.parse(
+        stateString,
+      ).toRadixString(2).padLeft(8, '0');
+      debugPrint("پیام پردازش شد: وضعیت تاچ‌ها (باینری) $binaryState");
 
       Provider.of<DeviceProvider>(
         context,
         listen: false,
-      ).updateButtonStatesFromString(widget.deviceId, stateString);
+      ).updateButtonStatesFromString(widget.deviceId, binaryState);
 
       setState(() {
         final deviceProvider = Provider.of<DeviceProvider>(
