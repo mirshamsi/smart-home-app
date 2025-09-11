@@ -22,7 +22,7 @@ class DeviceProvider with ChangeNotifier {
       Match? match = regex.firstMatch(message);
 
       if (match != null && match.group(5) == deviceId) {
-        String stateString = match.group(1)!; 
+        String stateString = match.group(1)!;
         updateButtonStatesFromString(deviceId, stateString);
       }
     } catch (e) {
@@ -49,11 +49,162 @@ class DeviceProvider with ChangeNotifier {
     if (!_devicesByItem.containsKey(itemName)) {
       _devicesByItem[itemName] = [];
     }
-    if (!_devicesByItem[itemName]!.any(
+
+    // بررسی تکراری نبودن دستگاه
+    bool deviceExists = _devicesByItem[itemName]!.any(
       (d) => d.deviceId == deviceModel.deviceId,
-    )) {
+    );
+
+    if (!deviceExists) {
       _devicesByItem[itemName]!.add(deviceModel);
       _saveDevicesToHive(itemName);
+      debugPrint(
+        "Device added: ${deviceModel.name} with ID ${deviceModel.deviceId}",
+      );
+      notifyListeners();
+    } else {
+      debugPrint("Device with ID ${deviceModel.deviceId} already exists");
+    }
+  }
+
+  bool addDeviceManually(String deviceId, String deviceInfo, String itemName) {
+    // بررسی تکراری نبودن Device ID
+    bool deviceExists =
+        _devicesByItem[itemName]?.any(
+          (device) => device.deviceId == deviceId,
+        ) ??
+        false;
+
+    if (deviceExists) {
+      debugPrint("Device with ID $deviceId already exists");
+      return false;
+    }
+
+    // تعیین اطلاعات دستگاه بر اساس deviceInfo
+    Map<String, String> deviceData = _createDeviceData(deviceId, deviceInfo);
+
+    // افزودن دستگاه
+    addDevice(deviceData, itemName);
+    return true;
+  }
+
+  Map<String, String> _createDeviceData(String deviceId, String deviceInfo) {
+    String deviceName;
+    String deviceImage;
+    Map<String, String> deviceData;
+
+    // سنسورها و دستگاه‌های ویژه
+    if (["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+      switch (deviceInfo) {
+        case "12":
+          deviceName = "تشخیص حرکت";
+          deviceImage = "assets/motion-sensor.png";
+          break;
+        case "13":
+          deviceName = "سنسور دود";
+          deviceImage = "assets/smoke-sensor.png";
+          break;
+        case "14":
+          deviceName = "سنسور در و پنجره";
+          deviceImage = "assets/door-window-sensor.png";
+          break;
+        case "11":
+          deviceName = "سنسور دما و رطوبت";
+          deviceImage = "assets/temp-humidity-sensor.jpg";
+          break;
+        case "5":
+          deviceName = "سر لامپی";
+          deviceImage = "assets/lamp-head.png";
+          break;
+        case "9":
+          deviceName = "هاب IR";
+          deviceImage = "assets/unknown-device.png";
+          break;
+        case "7":
+          deviceName = "هاب اصلی";
+          deviceImage = "assets/unknown-device.png";
+          break;
+        default:
+          deviceName = "دستگاه ناشناخته";
+          deviceImage = "assets/unknown-device.png";
+          break;
+      }
+      deviceData = {
+        "name": deviceName,
+        "deviceId": deviceId,
+        "image": deviceImage,
+        "deviceInfo": deviceInfo,
+      };
+    } else {
+      // کلیدهای لمسی
+      int poleCount = 0;
+      switch (deviceInfo) {
+        case "66":
+          deviceName = "کلید لمسی 6 پل";
+          deviceImage = "assets/6-pol.png";
+          poleCount = 6;
+          break;
+        case "64":
+          deviceName = "کلید لمسی 4 پل";
+          deviceImage = "assets/4-pol.png";
+          poleCount = 4;
+          break;
+        case "63":
+          deviceName = "کلید لمسی 3 پل";
+          deviceImage = "assets/3-pol.png";
+          poleCount = 3;
+          break;
+        case "62":
+          deviceName = "کلید لمسی 2 پل";
+          deviceImage = "assets/2-pol.png";
+          poleCount = 2;
+          break;
+        case "61":
+          deviceName = "کلید لمسی 1 پل";
+          deviceImage = "assets/1-pol.png";
+          poleCount = 1;
+          break;
+        default:
+          deviceName = "دستگاه ناشناخته";
+          deviceImage = "assets/1-pol.png";
+          poleCount = 1;
+          break;
+      }
+      deviceData = {
+        "name": deviceName,
+        "deviceId": deviceId,
+        "image": deviceImage,
+        "poleCount": poleCount.toString(),
+        "deviceInfo": deviceInfo,
+      };
+    }
+
+    return deviceData;
+  }
+
+  Future<void> _deleteButtonStatesFromHive(String deviceId) async {
+    final box = await Hive.openBox<ButtonStateModel>('buttonStates');
+    await box.delete('relayStatus_$deviceId');
+  }
+
+  Future<void> _deletePacketNumbersFromHive(String deviceId) async {
+    final box = await Hive.openBox<PacketNumberModel>('packetNumbers');
+    await box.delete('packetNumbers_$deviceId');
+  }
+
+  void removeDevice(String deviceId, String itemName) {
+    if (_devicesByItem.containsKey(itemName)) {
+      _devicesByItem[itemName]!.removeWhere(
+        (device) => device.deviceId == deviceId,
+      );
+      _buttonStates.remove(deviceId);
+      _lastPacketNumbers.remove(deviceId);
+
+      // Remove from Hive
+      _saveDevicesToHive(itemName);
+      _deleteButtonStatesFromHive(deviceId);
+      _deletePacketNumbersFromHive(deviceId);
+
       notifyListeners();
     }
   }
@@ -146,6 +297,34 @@ class DeviceProvider with ChangeNotifier {
           ),
         )
         .toMap();
+  }
+
+  bool deviceExists(String deviceId, String itemName) {
+    return _devicesByItem[itemName]?.any(
+          (device) => device.deviceId == deviceId,
+        ) ??
+        false;
+  }
+
+  int getDeviceCountForItem(String itemName) {
+    return _devicesByItem[itemName]?.length ?? 0;
+  }
+
+  void clearAllDevices(String itemName) {
+    if (_devicesByItem.containsKey(itemName)) {
+      
+      for (var device in _devicesByItem[itemName]!) {
+        _buttonStates.remove(device.deviceId);
+        _lastPacketNumbers.remove(device.deviceId);
+        _deleteButtonStatesFromHive(device.deviceId);
+        _deletePacketNumbersFromHive(device.deviceId);
+      }
+      
+      _devicesByItem[itemName]!.clear();
+      _saveDevicesToHive(itemName);
+      debugPrint("Cleared all devices for $itemName");
+      notifyListeners();
+    }
   }
 }
 

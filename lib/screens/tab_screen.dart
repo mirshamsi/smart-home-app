@@ -2,17 +2,18 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_serial_communication/models/device_info.dart';
 import 'package:topaz/providers/connection_provider.dart';
 import 'package:topaz/providers/device_provider.dart';
 import 'package:topaz/providers/theme_provider.dart';
 import 'package:topaz/screens/gas_sensor_page.dart';
 import 'package:topaz/screens/manage_device.dart';
+import 'package:topaz/screens/temperature_and_humidity.dart';
 import 'package:topaz/services/serial_service.dart';
 
 class TabScreen extends StatefulWidget {
   final String itemName;
-
   const TabScreen({required this.itemName});
 
   @override
@@ -29,6 +30,31 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
   bool _isReceiving = false;
   StreamSubscription? _serialSubscription;
   Timer? _receiveTimer;
+  final TextEditingController _deviceIdController = TextEditingController();
+  String _selectedDeviceInfo = '61';
+
+  final List<Map<String, String>> _deviceTypes = [
+    {'value': '61', 'name': 'کلید لمسی 1 پل', 'image': 'assets/1-pol.png'},
+    {'value': '62', 'name': 'کلید لمسی 2 پل', 'image': 'assets/2-pol.png'},
+    {'value': '63', 'name': 'کلید لمسی 3 پل', 'image': 'assets/3-pol.png'},
+    {'value': '64', 'name': 'کلید لمسی 4 پل', 'image': 'assets/4-pol.png'},
+    {'value': '66', 'name': 'کلید لمسی 6 پل', 'image': 'assets/6-pol.png'},
+    {'value': '12', 'name': 'تشخیص حرکت', 'image': 'assets/motion-sensor.png'},
+    {'value': '13', 'name': 'سنسور دود', 'image': 'assets/smoke-sensor.png'},
+    {
+      'value': '14',
+      'name': 'سنسور در و پنجره',
+      'image': 'assets/door-window-sensor.png',
+    },
+    {
+      'value': '11',
+      'name': 'سنسور دما و رطوبت',
+      'image': 'assets/temp-humidity-sensor.jpg',
+    },
+    {'value': '5', 'name': 'سر لامپی', 'image': 'assets/lamp-head.png'},
+    {'value': '9', 'name': 'هاب IR', 'image': 'assets/unknown-device.png'},
+    {'value': '7', 'name': 'هاب اصلی', 'image': 'assets/unknown-device.png'},
+  ];
 
   @override
   void initState() {
@@ -128,7 +154,6 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       String deviceInfo = match.group(3)!;
       String receivedDeviceId = match.group(4)!;
 
-      // Check if device already exists to prevent duplicates
       bool deviceExists = Provider.of<DeviceProvider>(context, listen: false)
           .getDevices(widget.itemName)
           .any((device) => device["deviceId"] == receivedDeviceId);
@@ -137,17 +162,51 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         String deviceName;
         String deviceImage;
         Map<String, String> deviceData;
-        if (deviceInfo == "12") {
-          deviceName = "گاز";
-          deviceImage = "assets/sensor-gaz.png";
+
+        // سنسورها و دستگاه‌های ویژه
+        if (["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+          switch (deviceInfo) {
+            case "12":
+              deviceName = "تشخیص حرکت";
+              deviceImage = "assets/motion-sensor.png";
+              break;
+            case "13":
+              deviceName = "سنسور دود";
+              deviceImage = "assets/smoke-sensor.png";
+              break;
+            case "14":
+              deviceName = "سنسور در و پنجره";
+              deviceImage = "assets/door-window-sensor.png";
+              break;
+            case "11":
+              deviceName = "سنسور دما و رطوبت";
+              deviceImage = "assets/temp-humidity-sensor.jpg";
+              break;
+            case "5":
+              deviceName = "سر لامپی";
+              deviceImage = "assets/lamp-head.png";
+              break;
+            case "9":
+              deviceName = "هاب IR";
+              deviceImage = "assets/unknown-device.png";
+              break;
+            case "7":
+              deviceName = "هاب اصلی";
+              deviceImage = "assets/unknown-device.png";
+              break;
+            default:
+              deviceName = "دستگاه ناشناخته";
+              deviceImage = "assets/unknown-device.png";
+              break;
+          }
           deviceData = {
             "name": deviceName,
-            "deviceId":
-                receivedDeviceId, // Use receivedDeviceId instead of stateCode
+            "deviceId": receivedDeviceId,
             "image": deviceImage,
             "deviceInfo": deviceInfo,
           };
         } else {
+          // کلیدهای لمسی
           int poleCount = 0;
           switch (deviceInfo) {
             case "66":
@@ -196,11 +255,10 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             context,
             listen: false,
           ).addDevice(deviceData, widget.itemName);
-          debugPrint(
-            "Device added: $deviceName with ID ${deviceData["deviceId"]}",
-          );
         });
-      } else if (!_isLearning && deviceInfo != "12") {
+      } else if (!_isLearning &&
+          !["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+        // فقط برای کلیدهای لمسی وضعیت به‌روزرسانی شود
         bool newState = stateCode == "1";
         int relayNumber = int.parse(buttonCode);
         Provider.of<DeviceProvider>(
@@ -226,7 +284,6 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       String deviceInfo = match.group(3)!;
       String receivedDeviceId = match.group(4)!;
 
-      // Check if device already exists
       bool deviceExists = Provider.of<DeviceProvider>(context, listen: false)
           .getDevices(widget.itemName)
           .any((device) => device["deviceId"] == receivedDeviceId);
@@ -236,9 +293,42 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       Map<String, String> deviceData;
       int poleCount = 0;
 
-      if (deviceInfo == "12") {
-        deviceName = "گاز";
-        deviceImage = "assets/sensor-gaz.png";
+      // سنسورها و دستگاه‌های ویژه
+      if (["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+        switch (deviceInfo) {
+          case "12":
+            deviceName = "تشخیص حرکت";
+            deviceImage = "assets/motion-sensor.png";
+            break;
+          case "13":
+            deviceName = "سنسور دود";
+            deviceImage = "assets/smoke-sensor.png";
+            break;
+          case "14":
+            deviceName = "سنسور در و پنجره";
+            deviceImage = "assets/door-window-sensor.png";
+            break;
+          case "11":
+            deviceName = "سنسور دما و رطوبت";
+            deviceImage = "assets/temp-humidity-sensor.png";
+            break;
+          case "5":
+            deviceName = "سر لامپی";
+            deviceImage = "assets/lamp-head.png";
+            break;
+          case "9":
+            deviceName = "هاب IR";
+            deviceImage = "assets/unknown-device.jpg";
+            break;
+          case "7":
+            deviceName = "هاب اصلی";
+            deviceImage = "assets/unknown-device.jpg";
+            break;
+          default:
+            deviceName = "دستگاه ناشناخته";
+            deviceImage = "assets/unknown-device.jpg";
+            break;
+        }
         deviceData = {
           "name": deviceName,
           "deviceId": receivedDeviceId,
@@ -246,6 +336,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
           "deviceInfo": deviceInfo,
         };
       } else {
+        // کلیدهای لمسی
         switch (deviceInfo) {
           case "66":
             deviceName = "کلید لمسی 6 پل";
@@ -287,7 +378,6 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         };
       }
 
-      // اگر دستگاه وجود ندارد، آن را اضافه کن
       if (!deviceExists) {
         setState(() {
           deviceId = receivedDeviceId;
@@ -303,8 +393,8 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         debugPrint("Device with ID $receivedDeviceId already exists.");
       }
 
-      // در هر صورت، اگر دستگاه کلید است، وضعیت دکمه‌هایش را به‌روزرسانی کن
-      if (deviceInfo != "12") {
+      // فقط برای کلیدهای لمسی وضعیت به‌روزرسانی شود
+      if (!["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
         Provider.of<DeviceProvider>(
           context,
           listen: false,
@@ -388,10 +478,350 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
     Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
   }
 
+  // Show confirmation dialog for device deletion
+  void _showDeleteDeviceDialog(String deviceId, String deviceName) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final themeProvider = Provider.of<ThemeProvider>(context);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          backgroundColor: themeProvider.isDarkMode
+              ? Colors.grey[850]
+              : Colors.white,
+          title: Text(
+            'حذف دستگاه',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: themeProvider.isDarkMode
+                  ? Colors.yellow[300]
+                  : Colors.black,
+            ),
+          ),
+          content: Text(
+            'آیا مطمئن هستید که می‌خواهید دستگاه "$deviceName" را حذف کنید؟',
+            style: TextStyle(
+              color: themeProvider.isDarkMode
+                  ? Colors.grey[300]
+                  : Colors.grey[700],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('لغو', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Provider.of<DeviceProvider>(
+                  context,
+                  listen: false,
+                ).removeDevice(deviceId, widget.itemName);
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('دستگاه $deviceName با موفقیت حذف شد'),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+              ),
+              child: const Text('حذف', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddDeviceDialog() {
+    _deviceIdController.clear();
+    _selectedDeviceInfo = '61'; // ریست به پیش‌فرض
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final themeProvider = Provider.of<ThemeProvider>(context);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+              backgroundColor: themeProvider.isDarkMode
+                  ? Colors.grey[850]
+                  : Colors.white,
+              title: Text(
+                'افزودن دستی دستگاه',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: themeProvider.isDarkMode
+                      ? Colors.yellow[300]
+                      : Colors.black,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // انتخاب نوع دستگاه
+                    Text(
+                      'نوع دستگاه:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: themeProvider.isDarkMode
+                            ? Colors.grey[300]
+                            : Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[600]!
+                              : Colors.grey[400]!,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedDeviceInfo,
+                          isExpanded: true,
+                          dropdownColor: themeProvider.isDarkMode
+                              ? Colors.grey[800]
+                              : Colors.white,
+                          style: TextStyle(
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[300]
+                                : Colors.grey[700],
+                          ),
+                          items: _deviceTypes.map((device) {
+                            return DropdownMenuItem<String>(
+                              value: device['value'],
+                              child: Row(
+                                children: [
+                                  Image.asset(
+                                    device['image']!,
+                                    width: 24,
+                                    height: 24,
+                                    fit: BoxFit.contain,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      device['name']!,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setDialogState(() {
+                              _selectedDeviceInfo = value!;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // وارد کردن Device ID
+                    Text(
+                      'شناسه دستگاه (Device ID):',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: themeProvider.isDarkMode
+                            ? Colors.grey[300]
+                            : Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _deviceIdController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10), // محدود کردن طول
+                      ],
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode
+                            ? Colors.grey[300]
+                            : Colors.grey[700],
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'مثال: 12345',
+                        hintStyle: TextStyle(
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[500]
+                              : Colors.grey[400],
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[600]!
+                                : Colors.grey[400]!,
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[600]!
+                                : Colors.grey[400]!,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: themeProvider.isDarkMode
+                                ? Colors.yellow[300]!
+                                : Colors.amber[700]!,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'لغو',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    _addDeviceManually();
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeProvider.isDarkMode
+                        ? Colors.yellow[300]
+                        : Colors.amber[700],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                  ),
+                  child: const Text(
+                    'افزودن',
+                    style: TextStyle(color: Colors.black),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _addDeviceManually() {
+    String inputDeviceId = _deviceIdController.text.trim();
+
+    // بررسی خالی نبودن Device ID
+    if (inputDeviceId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("لطفاً شناسه دستگاه را وارد کنید")),
+      );
+      return;
+    }
+
+    // بررسی تکراری نبودن Device ID
+    bool deviceExists = Provider.of<DeviceProvider>(context, listen: false)
+        .getDevices(widget.itemName)
+        .any((device) => device["deviceId"] == inputDeviceId);
+
+    if (deviceExists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("دستگاه با این شناسه قبلاً اضافه شده است"),
+        ),
+      );
+      return;
+    }
+
+    // پیدا کردن اطلاعات دستگاه انتخاب شده
+    final selectedDevice = _deviceTypes.firstWhere(
+      (device) => device['value'] == _selectedDeviceInfo,
+    );
+
+    String deviceName = selectedDevice['name']!;
+    String deviceImage = selectedDevice['image']!;
+    Map<String, String> deviceData;
+
+    // ایجاد deviceData بر اساس نوع دستگاه
+    if (["12", "13", "14", "11", "5", "9", "7"].contains(_selectedDeviceInfo)) {
+      // سنسورها و دستگاه‌های ویژه
+      deviceData = {
+        "name": deviceName,
+        "deviceId": inputDeviceId,
+        "image": deviceImage,
+        "deviceInfo": _selectedDeviceInfo,
+      };
+    } else {
+      // کلیدهای لمسی
+      int poleCount = 0;
+      switch (_selectedDeviceInfo) {
+        case "66":
+          poleCount = 6;
+          break;
+        case "64":
+          poleCount = 4;
+          break;
+        case "63":
+          poleCount = 3;
+          break;
+        case "62":
+          poleCount = 2;
+          break;
+        case "61":
+          poleCount = 1;
+          break;
+        default:
+          poleCount = 1;
+          break;
+      }
+      deviceData = {
+        "name": deviceName,
+        "deviceId": inputDeviceId,
+        "image": deviceImage,
+        "poleCount": poleCount.toString(),
+        "deviceInfo": _selectedDeviceInfo,
+      };
+    }
+
+    // افزودن دستگاه
+    Provider.of<DeviceProvider>(
+      context,
+      listen: false,
+    ).addDevice(deviceData, widget.itemName);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('دستگاه $deviceName با موفقیت اضافه شد')),
+    );
+
+    debugPrint("Device manually added: $deviceName with ID $inputDeviceId");
+  }
+
   @override
   void dispose() {
     _serialSubscription?.cancel();
     _receiveTimer?.cancel();
+    _deviceIdController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -444,35 +874,15 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             tooltip: 'پاک کردن',
             onPressed: _sendClearCommand,
           ),
-          // PopupMenuButton<String>(
-          //   icon: Icon(
-          //     themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-          //     color: Colors.white,
-          //     size: isTablet ? 28 : 24,
-          //   ),
-          //   onSelected: (String value) {
-          //     if (value == 'toggle_theme') _toggleDarkMode();
-          //   },
-          //   itemBuilder: (BuildContext context) => [
-          //     PopupMenuItem<String>(
-          //       value: 'toggle_theme',
-          //       child: Row(
-          //         children: [
-          //           Icon(
-          //             themeProvider.isDarkMode
-          //                 ? Icons.light_mode
-          //                 : Icons.dark_mode,
-          //             color: themeProvider.isDarkMode
-          //                 ? Colors.yellow[300]
-          //                 : Colors.yellow[800],
-          //           ),
-          //           SizedBox(width: isTablet ? 10 : 8),
-          //           Text(themeProvider.isDarkMode ? 'حالت روشن' : 'حالت تاریک'),
-          //         ],
-          //       ),
-          //     ),
-          //   ],
-          // ),
+          IconButton(
+            icon: Icon(
+              Icons.add_circle_outline,
+              color: Colors.white,
+              size: isTablet ? 28 : 24,
+            ),
+            tooltip: 'افزودن دستی دستگاه',
+            onPressed: _showAddDeviceDialog,
+          ),
         ],
       ),
       body: SafeArea(
@@ -535,84 +945,222 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
                 ),
               )
             : GridView.builder(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(isTablet ? 20.0 : 16.0),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: _getCrossAxisCount(context),
-                  crossAxisSpacing: 12.0,
-                  mainAxisSpacing: 12.0,
-                  childAspectRatio: 1.0,
+                  crossAxisSpacing: isTablet ? 16.0 : 12.0,
+                  mainAxisSpacing: isTablet ? 16.0 : 12.0,
+                  childAspectRatio: _getChildAspectRatio(context),
                 ),
                 itemCount: deviceProvider.getDevices(widget.itemName).length,
                 itemBuilder: (context, index) {
                   final device = deviceProvider.getDevices(
                     widget.itemName,
                   )[index];
-                  return GestureDetector(
-                    onTap: () {
-                      if (device["deviceInfo"] == "12") {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => GasSensorPage(
-                              deviceId: device["deviceId"]!,
-                              deviceName: device["name"]!,
+                  return Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if ([
+                            "13",
+                            "14",
+                            "12",
+                          ].contains(device["deviceInfo"])) {
+                            // برای سنسورها به صفحه سنسور برو
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => GasSensorPage(
+                                  // یا صفحه مخصوص سنسورها
+                                  deviceId: device["deviceId"]!,
+                                  deviceName: device["name"]!,
+                                ),
+                              ),
+                            );
+                          } else if (device["deviceInfo"] == "11") {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TemperatureAndHumidity(
+                                  deviceName: device["name"]!,
+                                ),
+                              ),
+                            );
+                          } else if ([
+                            "5",
+                            "9",
+                            "7",
+                          ].contains(device["deviceInfo"])) {
+                            // برای هاب‌ها و سر لامپی به صفحه مدیریت خاص برو
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ManageDevice(
+                                  deviceId: device["deviceId"]!,
+                                  itemName: widget.itemName,
+                                  deviceInfo: device["deviceInfo"]!,
+                                ),
+                              ),
+                            );
+                          } else {
+                            // برای کلیدهای لمسی
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ManageDevice(
+                                  deviceId: device["deviceId"]!,
+                                  itemName: widget.itemName,
+                                  deviceInfo: device["deviceInfo"]!,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          child: Card(
+                            elevation: themeProvider.isDarkMode ? 8.0 : 6.0,
+                            shadowColor: themeProvider.isDarkMode
+                                ? Colors.black54
+                                : Colors.grey.withOpacity(0.3),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                isTablet ? 20.0 : 16.0,
+                              ),
+                              side: BorderSide(
+                                color: themeProvider.isDarkMode
+                                    ? Colors.grey[700]!
+                                    : Colors.grey[300]!,
+                                width: 0.5,
+                              ),
+                            ),
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[850]
+                                : Colors.white,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isTablet ? 16 : 12,
+                                vertical: isTablet ? 20 : 16,
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    height: isTablet ? 100 : 70,
+                                    width: isTablet ? 100 : 70,
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: themeProvider.isDarkMode
+                                          ? Colors.grey[800]
+                                          : Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(
+                                        isTablet ? 16 : 12,
+                                      ),
+                                      border: Border.all(
+                                        color: themeProvider.isDarkMode
+                                            ? Colors.grey[600]!
+                                            : Colors.grey[300]!,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Image.asset(
+                                      device["image"]!,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return Icon(
+                                              Icons.device_unknown,
+                                              size: isTablet ? 50 : 35,
+                                              color: themeProvider.isDarkMode
+                                                  ? Colors.grey[500]
+                                                  : Colors.grey[600],
+                                            );
+                                          },
+                                    ),
+                                  ),
+                                  SizedBox(height: isTablet ? 16.0 : 12.0),
+                                  Container(
+                                    width: double.infinity,
+                                    child: Text(
+                                      device["name"]!,
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 18 : 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: themeProvider.isDarkMode
+                                            ? Colors.grey[100]
+                                            : Colors.grey[800],
+                                        height: 1.2,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  SizedBox(height: isTablet ? 8.0 : 6.0),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isTablet ? 12 : 8,
+                                      vertical: isTablet ? 6 : 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: themeProvider.isDarkMode
+                                          ? Colors.amber[800]?.withOpacity(0.2)
+                                          : Colors.amber[100],
+                                      borderRadius: BorderRadius.circular(
+                                        isTablet ? 12 : 8,
+                                      ),
+                                      border: Border.all(
+                                        color: themeProvider.isDarkMode
+                                            ? Colors.amber[600]!
+                                            : Colors.amber[300]!,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      "ID: ${device["deviceId"]!}",
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 13 : 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: themeProvider.isDarkMode
+                                            ? Colors.amber[300]
+                                            : Colors.amber[800],
+                                        letterSpacing: 0.5,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        );
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ManageDevice(
-                              deviceId: device["deviceId"]!,
-                              itemName: widget.itemName,
-                              deviceInfo: device["deviceInfo"]!,
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    child: Card(
-                      elevation: 4.0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16.0),
+                        ),
                       ),
-                      color: themeProvider.isDarkMode
-                          ? Colors.grey[800]
-                          : Colors.white,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset(
-                            device["image"]!,
-                            height: isTablet ? 80 : 60,
-                            fit: BoxFit.contain,
-                          ),
-                          const SizedBox(height: 8.0),
-                          Text(
-                            device["name"]!,
-                            style: TextStyle(
-                              fontSize: isTablet ? 18 : 14,
-                              fontWeight: FontWeight.bold,
-                              color: themeProvider.isDarkMode
-                                  ? Colors.grey[200]
-                                  : Colors.grey[900],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 4.0),
-                          Text(
-                            device["deviceId"]!,
-                            style: TextStyle(
-                              fontSize: isTablet ? 14 : 12,
-                              color: themeProvider.isDarkMode
-                                  ? Colors.grey[400]
-                                  : Colors.grey[600],
+                      Positioned(
+                        top: isTablet ? 12 : 8,
+                        right: isTablet ? 12 : 8,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              isTablet ? 12 : 8,
                             ),
                           ),
-                        ],
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: Colors.red[600],
+                              size: isTablet ? 23 : 20,
+                            ),
+                            onPressed: () => _showDeleteDeviceDialog(
+                              device["deviceId"]!,
+                              device["name"]!,
+                            ),
+                            padding: EdgeInsets.all(isTablet ? 8 : 4),
+                            tooltip: 'حذف دستگاه',
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   );
                 },
               ),
@@ -664,57 +1212,10 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
     return 2;
   }
 
-  Widget _buildButton(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required VoidCallback onPressed,
-    required LinearGradient gradient,
-  }) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 20, color: Colors.white),
-        label: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        style:
-            ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              elevation: 6,
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.black26,
-              foregroundColor: Colors.white.withOpacity(0.9),
-            ).copyWith(
-              backgroundColor: MaterialStateProperty.resolveWith<Color>((
-                states,
-              ) {
-                if (states.contains(MaterialState.pressed))
-                  return gradient.colors[1].withOpacity(0.8);
-                return Colors.transparent;
-              }),
-            ),
-      ),
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(12.0),
-        boxShadow: [
-          BoxShadow(
-            color: gradient.colors[1].withOpacity(0.4),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-    );
+  double _getChildAspectRatio(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width > 1200) return 0.85; // for desktop
+    if (width > 600) return 0.9; // for tablet
+    return 1.0; // for mobile
   }
 }
