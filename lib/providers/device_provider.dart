@@ -129,14 +129,23 @@ class DeviceProvider with ChangeNotifier {
           deviceImage = "assets/unknown-device.png";
           break;
       }
-      deviceData = {
-        "name": deviceName,
-        "deviceId": deviceId,
-        "image": deviceImage,
-        "deviceInfo": deviceInfo,
-      };
+      if (deviceInfo == "5") {
+        deviceData = {
+          "name": deviceName,
+          "deviceId": deviceId,
+          "image": deviceImage,
+          "deviceInfo": deviceInfo,
+          "poleCount": "2",
+        };
+      } else {
+        deviceData = {
+          "name": deviceName,
+          "deviceId": deviceId,
+          "image": deviceImage,
+          "deviceInfo": deviceInfo,
+        };
+      }
     } else {
-      // کلیدهای لمسی
       int poleCount = 0;
       switch (deviceInfo) {
         case "66":
@@ -312,14 +321,13 @@ class DeviceProvider with ChangeNotifier {
 
   void clearAllDevices(String itemName) {
     if (_devicesByItem.containsKey(itemName)) {
-      
       for (var device in _devicesByItem[itemName]!) {
         _buttonStates.remove(device.deviceId);
         _lastPacketNumbers.remove(device.deviceId);
         _deleteButtonStatesFromHive(device.deviceId);
         _deletePacketNumbersFromHive(device.deviceId);
       }
-      
+
       _devicesByItem[itemName]!.clear();
       _saveDevicesToHive(itemName);
       debugPrint("Cleared all devices for $itemName");

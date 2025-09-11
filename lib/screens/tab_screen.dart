@@ -7,8 +7,12 @@ import 'package:flutter_serial_communication/models/device_info.dart';
 import 'package:topaz/providers/connection_provider.dart';
 import 'package:topaz/providers/device_provider.dart';
 import 'package:topaz/providers/theme_provider.dart';
+import 'package:topaz/screens/doors_windows_page.dart';
 import 'package:topaz/screens/gas_sensor_page.dart';
+import 'package:topaz/screens/head_lamp.dart';
 import 'package:topaz/screens/manage_device.dart';
+import 'package:topaz/screens/motion_page.dart';
+import 'package:topaz/screens/smoke_page.dart';
 import 'package:topaz/screens/temperature_and_humidity.dart';
 import 'package:topaz/services/serial_service.dart';
 
@@ -199,14 +203,23 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
               deviceImage = "assets/unknown-device.png";
               break;
           }
-          deviceData = {
-            "name": deviceName,
-            "deviceId": receivedDeviceId,
-            "image": deviceImage,
-            "deviceInfo": deviceInfo,
-          };
+          if (deviceInfo == "5") {
+            deviceData = {
+              "name": deviceName,
+              "deviceId": deviceId,
+              "image": deviceImage,
+              "deviceInfo": deviceInfo,
+              "poleCount": "2",
+            };
+          } else {
+            deviceData = {
+              "name": deviceName,
+              "deviceId": deviceId,
+              "image": deviceImage,
+              "deviceInfo": deviceInfo,
+            };
+          }
         } else {
-          // کلیدهای لمسی
           int poleCount = 0;
           switch (deviceInfo) {
             case "66":
@@ -329,14 +342,23 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             deviceImage = "assets/unknown-device.jpg";
             break;
         }
-        deviceData = {
-          "name": deviceName,
-          "deviceId": receivedDeviceId,
-          "image": deviceImage,
-          "deviceInfo": deviceInfo,
-        };
+        if (deviceInfo == "5") {
+          deviceData = {
+            "name": deviceName,
+            "deviceId": deviceId,
+            "image": deviceImage,
+            "deviceInfo": deviceInfo,
+            "poleCount": "2",
+          };
+        } else {
+          deviceData = {
+            "name": deviceName,
+            "deviceId": deviceId,
+            "image": deviceImage,
+            "deviceInfo": deviceInfo,
+          };
+        }
       } else {
-        // کلیدهای لمسی
         switch (deviceInfo) {
           case "66":
             deviceName = "کلید لمسی 6 پل";
@@ -764,13 +786,21 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
     Map<String, String> deviceData;
 
     // ایجاد deviceData بر اساس نوع دستگاه
-    if (["12", "13", "14", "11", "5", "9", "7"].contains(_selectedDeviceInfo)) {
+    if (["12", "13", "14", "11", "9", "7"].contains(_selectedDeviceInfo)) {
       // سنسورها و دستگاه‌های ویژه
       deviceData = {
         "name": deviceName,
         "deviceId": inputDeviceId,
         "image": deviceImage,
         "deviceInfo": _selectedDeviceInfo,
+      };
+    } else if (_selectedDeviceInfo == "5") {
+      deviceData = {
+        "name": deviceName,
+        "deviceId": inputDeviceId,
+        "image": deviceImage,
+        "deviceInfo": _selectedDeviceInfo,
+        "poleCount": "2",
       };
     } else {
       // کلیدهای لمسی
@@ -961,18 +991,38 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
                     children: [
                       GestureDetector(
                         onTap: () {
-                          if ([
-                            "13",
-                            "14",
-                            "12",
-                          ].contains(device["deviceInfo"])) {
-                            // برای سنسورها به صفحه سنسور برو
+                          if (device["deviceInfo"] == "12") {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => GasSensorPage(
-                                  // یا صفحه مخصوص سنسورها
+                                builder: (context) =>
+                                    MotionPage(deviceName: device["name"]!),
+                              ),
+                            );
+                          } else if (device["deviceInfo"] == "5") {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => HeadLamp(
                                   deviceId: device["deviceId"]!,
+                                  itemName: widget.itemName,
+                                  deviceInfo: device["deviceInfo"]!,
+                                ),
+                              ),
+                            );
+                          } else if (device["deviceInfo"] == "13") {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    SmokePage(deviceName: device["name"]!),
+                              ),
+                            );
+                          } else if (device["deviceInfo"] == "14") {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => DoorsWindowsPage(
                                   deviceName: device["name"]!,
                                 ),
                               ),
@@ -991,7 +1041,6 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
                             "9",
                             "7",
                           ].contains(device["deviceInfo"])) {
-                            // برای هاب‌ها و سر لامپی به صفحه مدیریت خاص برو
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -1003,7 +1052,6 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
                               ),
                             );
                           } else {
-                            // برای کلیدهای لمسی
                             Navigator.push(
                               context,
                               MaterialPageRoute(
