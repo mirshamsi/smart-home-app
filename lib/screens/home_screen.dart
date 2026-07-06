@@ -13,6 +13,7 @@ import 'package:topaz/providers/theme_provider.dart';
 import 'package:topaz/screens/live_room.dart';
 import 'package:topaz/screens/scenarios_screen.dart';
 import 'package:topaz/screens/settings_screen.dart';
+import 'package:topaz/config/responsive.dart';
 
 // Callback function for foreground task
 // @pragma('vm:entry-point')
@@ -1044,67 +1045,171 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   @override
+  // Widget build(BuildContext context) {
+  //   final themeProvider = Provider.of<ThemeProvider>(context);
+  //   return WithForegroundTask(
+  //     child: Scaffold(
+  //       backgroundColor: themeProvider.isDarkMode
+  //           ? Colors.black12
+  //           : Colors.grey[200],
+  //       body: _getSelectedScreen(),
+  //       bottomNavigationBar: Container(
+  //         margin: const EdgeInsets.only(
+  //           left: 10,
+  //           right: 10,
+  //           top: 2,
+  //           bottom: 15,
+  //         ),
+  //         decoration: BoxDecoration(
+  //           color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+  //           borderRadius: BorderRadius.only(
+  //             topLeft: Radius.circular(20),
+  //             topRight: Radius.circular(20),
+  //             bottomLeft: Radius.circular(45),
+  //             bottomRight: Radius.circular(45),
+  //           ),
+  //           boxShadow: [
+  //             BoxShadow(
+  //               color: Colors.black.withOpacity(0.1),
+  //               spreadRadius: 1,
+  //               blurRadius: 4,
+  //               offset: const Offset(0, 2),
+  //             ),
+  //           ],
+  //         ),
+  //         child: BottomNavigationBar(
+  //           items: const <BottomNavigationBarItem>[
+  //             BottomNavigationBarItem(
+  //               icon: _StyledNavIcon(icon: Icons.home),
+  //               label: 'خانه',
+  //             ),
+  //             BottomNavigationBarItem(
+  //               icon: _StyledNavIcon(icon: Icons.devices),
+  //               label: 'اتاق کنترل',
+  //             ),
+  //             BottomNavigationBarItem(
+  //               icon: _StyledNavIcon(icon: Icons.settings),
+  //               label: 'تنظیمات',
+  //             ),
+  //             BottomNavigationBarItem(
+  //               icon: _StyledNavIcon(icon: Icons.rule),
+  //               label: 'سناریوها',
+  //             ),
+  //           ],
+  //           currentIndex: _selectedIndex,
+  //           selectedItemColor: Colors.yellow[800],
+  //           selectedFontSize: 14,
+  //           unselectedItemColor: Colors.grey,
+  //           backgroundColor: Colors.transparent,
+  //           onTap: _onItemTapped,
+  //           type: BottomNavigationBarType.fixed,
+  //           elevation: 0,
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final isMobile = AppBreakpoints.isMobile(context);
+    final isDesktop = AppBreakpoints.isDesktop(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final destinations = const [
+      NavigationDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home_rounded),
+        label: 'خانه',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.devices_outlined),
+        selectedIcon: Icon(Icons.devices_rounded),
+        label: 'اتاق کنترل',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings_rounded),
+        label: 'تنظیمات',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.rule_outlined),
+        selectedIcon: Icon(Icons.rule_rounded),
+        label: 'سناریوها',
+      ),
+    ];
+
     return WithForegroundTask(
       child: Scaffold(
         backgroundColor: themeProvider.isDarkMode
-            ? Colors.black12
-            : Colors.grey[200],
-        body: _getSelectedScreen(),
-        bottomNavigationBar: Container(
-          margin: const EdgeInsets.only(
-            left: 10,
-            right: 10,
-            top: 2,
-            bottom: 15,
-          ),
-          decoration: BoxDecoration(
-            color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-              bottomLeft: Radius.circular(45),
-              bottomRight: Radius.circular(45),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                spreadRadius: 1,
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+            ? const Color(0xFF0D1117)
+            : const Color(0xFFF6F8FA),
+
+        body: isMobile
+            ? _getSelectedScreen()
+            : SafeArea(
+                child: Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: _selectedIndex,
+                      extended: isDesktop,
+                      minExtendedWidth: 190,
+                      labelType: isDesktop
+                          ? NavigationRailLabelType.none
+                          : NavigationRailLabelType.all,
+                      onDestinationSelected: _onItemTapped,
+                      leading: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: colorScheme.primaryContainer,
+                          child: Icon(
+                            Icons.home_work_rounded,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home_rounded),
+                          label: Text('خانه'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.devices_outlined),
+                          selectedIcon: Icon(Icons.devices_rounded),
+                          label: Text('اتاق کنترل'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings_rounded),
+                          label: Text('تنظیمات'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.rule_outlined),
+                          selectedIcon: Icon(Icons.rule_rounded),
+                          label: Text('سناریوها'),
+                        ),
+                      ],
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: _getSelectedScreen()),
+                  ],
+                ),
               ),
-            ],
-          ),
-          child: BottomNavigationBar(
-            items: const <BottomNavigationBarItem>[
-              BottomNavigationBarItem(
-                icon: _StyledNavIcon(icon: Icons.home),
-                label: 'خانه',
-              ),
-              BottomNavigationBarItem(
-                icon: _StyledNavIcon(icon: Icons.devices),
-                label: 'اتاق کنترل',
-              ),
-              BottomNavigationBarItem(
-                icon: _StyledNavIcon(icon: Icons.settings),
-                label: 'تنظیمات',
-              ),
-              BottomNavigationBarItem(
-                icon: _StyledNavIcon(icon: Icons.rule),
-                label: 'سناریوها',
-              ),
-            ],
-            currentIndex: _selectedIndex,
-            selectedItemColor: Colors.yellow[800],
-            selectedFontSize: 14,
-            unselectedItemColor: Colors.grey,
-            backgroundColor: Colors.transparent,
-            onTap: _onItemTapped,
-            type: BottomNavigationBarType.fixed,
-            elevation: 0,
-          ),
-        ),
+
+        bottomNavigationBar: isMobile
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: NavigationBar(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _onItemTapped,
+                    destinations: destinations,
+                  ),
+                ),
+              )
+            : null,
       ),
     );
   }
