@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:topaz/models/device_model.dart';
+import 'package:topaz/models/motion_model.dart';
+import 'package:topaz/models/temperature_humidity_model.dart';
 
 class DeviceProvider with ChangeNotifier {
   Map<String, List<DeviceModel>> _devicesByItem = {};
   Map<String, Map<int, String>> _buttonStates = {};
   Map<String, Map<int, int>> _lastPacketNumbers = {};
+  Map<String, TemperatureHumidityModel> _temperatureHumidityData = {};
+  Map<String, MotionModel> _motionData = {};
 
   List<Map<String, String>> getDevices(String itemName) =>
       _devicesByItem[itemName]?.map((device) => device.toMap()).toList() ?? [];
@@ -16,9 +20,17 @@ class DeviceProvider with ChangeNotifier {
   int getTotalDevices() =>
       _devicesByItem.values.fold(0, (sum, list) => sum + list.length);
 
+  TemperatureHumidityModel? getTemperatureHumidity(String deviceId) {
+    return _temperatureHumidityData[deviceId];
+  }
+
+  MotionModel? getMotionData(String deviceId) {
+    return _motionData[deviceId];
+  }
+
   void syncStateFromMessage(String message, String deviceId) {
     try {
-      RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
+      RegExp regex = RegExp(r"[0-9#]+");
       Match? match = regex.firstMatch(message);
 
       if (match != null && match.group(5) == deviceId) {
@@ -114,19 +126,19 @@ class DeviceProvider with ChangeNotifier {
           break;
         case "5":
           deviceName = "سر لامپی";
-          deviceImage = "assets/lamp-head.png";
+          deviceImage = "assets/lamp-head.jpg";
           break;
         case "9":
           deviceName = "هاب IR";
-          deviceImage = "assets/unknown-device.png";
+          deviceImage = "assets/hub-IR.png";
           break;
         case "7":
           deviceName = "هاب اصلی";
-          deviceImage = "assets/unknown-device.png";
+          deviceImage = "assets/unknown-device.jpg";
           break;
         default:
           deviceName = "دستگاه ناشناخته";
-          deviceImage = "assets/unknown-device.png";
+          deviceImage = "assets/unknown-device.jpg";
           break;
       }
       if (deviceInfo == "5") {
@@ -191,6 +203,19 @@ class DeviceProvider with ChangeNotifier {
     return deviceData;
   }
 
+  // حذف اطلاعات دما و رطوبت
+  Future<void> _deleteTemperatureHumidityFromHive(String deviceId) async {
+    final box = await Hive.openBox<TemperatureHumidityModel>(
+      'temperatureHumidity',
+    );
+    await box.delete('temp_humidity_$deviceId');
+  }
+
+  Future<void> _deleteMotionDataFromHive(String deviceId) async {
+    final box = await Hive.openBox<MotionModel>('motionData');
+    await box.delete('motion_$deviceId');
+  }
+
   Future<void> _deleteButtonStatesFromHive(String deviceId) async {
     final box = await Hive.openBox<ButtonStateModel>('buttonStates');
     await box.delete('relayStatus_$deviceId');
@@ -208,11 +233,15 @@ class DeviceProvider with ChangeNotifier {
       );
       _buttonStates.remove(deviceId);
       _lastPacketNumbers.remove(deviceId);
+      _temperatureHumidityData.remove(deviceId);
+      _motionData.remove(deviceId);
 
       // Remove from Hive
       _saveDevicesToHive(itemName);
       _deleteButtonStatesFromHive(deviceId);
       _deletePacketNumbersFromHive(deviceId);
+      _deleteTemperatureHumidityFromHive(deviceId);
+      _deleteMotionDataFromHive(deviceId);
 
       notifyListeners();
     }
@@ -222,6 +251,38 @@ class DeviceProvider with ChangeNotifier {
     _buttonStates[deviceId] ??= {};
     _buttonStates[deviceId]![relayNumber] = state; // Store "0" or "1"
     _saveButtonStatesToHive(deviceId);
+    notifyListeners();
+  }
+
+  Future<void> updateTemperatureHumidity(
+    String deviceId,
+    double temperature,
+    double humidity,
+  ) async {
+    _temperatureHumidityData[deviceId] = TemperatureHumidityModel(
+      deviceId: deviceId,
+      temperature: temperature,
+      humidity: humidity,
+      lastUpdate: DateTime.now(),
+    );
+
+    await _saveTemperatureHumidityToHive(deviceId);
+    notifyListeners();
+  }
+
+  Future<void> updateMotionData(
+    String deviceId,
+    String relayMode, {
+    bool isActive = true,
+  }) async {
+    _motionData[deviceId] = MotionModel(
+      deviceId: deviceId,
+      relayMode: relayMode,
+      lastDetection: DateTime.now(),
+      isActive: isActive,
+    );
+
+    await _saveMotionDataToHive(deviceId);
     notifyListeners();
   }
 
@@ -239,6 +300,17 @@ class DeviceProvider with ChangeNotifier {
     _lastPacketNumbers[deviceId]![relayNumber] = packetNumber;
     _savePacketNumbersToHive(deviceId);
     notifyListeners();
+  }
+
+  Future<void> loadTemperatureHumidityFromHive(String deviceId) async {
+    final box = await Hive.openBox<TemperatureHumidityModel>(
+      'temperatureHumidity',
+    );
+    final data = box.get('temp_humidity_$deviceId');
+    if (data != null) {
+      _temperatureHumidityData[deviceId] = data;
+      notifyListeners();
+    }
   }
 
   Future<void> loadDevicesFromHive(String itemName) async {
@@ -266,6 +338,30 @@ class DeviceProvider with ChangeNotifier {
       _lastPacketNumbers[deviceId] = packetNumbers.packetNumbers;
       notifyListeners();
     }
+  }
+
+  Future<void> loadMotionDataFromHive(String deviceId) async {
+    final box = await Hive.openBox<MotionModel>('motionData');
+    final data = box.get('motion_$deviceId');
+    if (data != null) {
+      _motionData[deviceId] = data;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _saveMotionDataToHive(String deviceId) async {
+    final box = await Hive.openBox<MotionModel>('motionData');
+    await box.put('motion_$deviceId', _motionData[deviceId]!);
+  }
+
+  Future<void> _saveTemperatureHumidityToHive(String deviceId) async {
+    final box = await Hive.openBox<TemperatureHumidityModel>(
+      'temperatureHumidity',
+    );
+    await box.put(
+      'temp_humidity_$deviceId',
+      _temperatureHumidityData[deviceId]!,
+    );
   }
 
   Future<void> _saveDevicesToHive(String itemName) async {
@@ -326,6 +422,8 @@ class DeviceProvider with ChangeNotifier {
         _lastPacketNumbers.remove(device.deviceId);
         _deleteButtonStatesFromHive(device.deviceId);
         _deletePacketNumbersFromHive(device.deviceId);
+        _deleteTemperatureHumidityFromHive(device.deviceId);
+        _deleteMotionDataFromHive(device.deviceId);
       }
 
       _devicesByItem[itemName]!.clear();
@@ -333,6 +431,15 @@ class DeviceProvider with ChangeNotifier {
       debugPrint("Cleared all devices for $itemName");
       notifyListeners();
     }
+  }
+
+  List<MotionModel> getAllMotionDevices() {
+    return _motionData.values.toList();
+  }
+
+  // متد برای دریافت دستگاه‌های Motion فعال
+  List<MotionModel> getActiveMotionDevices() {
+    return _motionData.values.where((motion) => motion.isActive).toList();
   }
 }
 

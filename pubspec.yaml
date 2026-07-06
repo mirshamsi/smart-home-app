@@ -2,7 +2,7 @@ name: topaz
 description: "Smart home app Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -42,7 +42,7 @@ dependencies:
   flutter_foreground_task: ^9.1.0
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  build_runner: ^2.4.15
+  build_runner: ^2.4.13
   hive_generator: ^2.0.1
   flutter_launcher_icons: ^0.14.3
   flutter_serial_communication: ^0.2.8
@@ -69,7 +69,6 @@ flutter_launcher_icons:
   adaptive_icon_background: "#ffffff"
   adaptive_icon_forground: "assets/forground_logo.png"
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

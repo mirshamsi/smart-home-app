@@ -8,7 +8,7 @@ import 'package:topaz/providers/connection_provider.dart';
 import 'package:topaz/providers/device_provider.dart';
 import 'package:topaz/providers/theme_provider.dart';
 import 'package:topaz/screens/doors_windows_page.dart';
-import 'package:topaz/screens/gas_sensor_page.dart';
+// import 'package:topaz/screens/gas_sensor_page.dart';
 import 'package:topaz/screens/head_lamp.dart';
 import 'package:topaz/screens/manage_device.dart';
 import 'package:topaz/screens/motion_page.dart';
@@ -55,9 +55,9 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       'name': 'سنسور دما و رطوبت',
       'image': 'assets/temp-humidity-sensor.jpg',
     },
-    {'value': '5', 'name': 'سر لامپی', 'image': 'assets/lamp-head.png'},
-    {'value': '9', 'name': 'هاب IR', 'image': 'assets/unknown-device.png'},
-    {'value': '7', 'name': 'هاب اصلی', 'image': 'assets/unknown-device.png'},
+    {'value': '5', 'name': 'سر لامپی', 'image': 'assets/lamp-head.jpg'},
+    {'value': '9', 'name': 'هاب IR', 'image': 'assets/hub-IR.png'},
+    {'value': '7', 'name': 'هاب اصلی', 'image': 'assets/unknown-device.jpg'},
   ];
 
   @override
@@ -101,7 +101,9 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
           debugPrint("پیام دریافتی (TabScreen): $message");
           setState(() {
             receivedMessages.add(message);
-            if (_isReceiving) {
+            if (_isTemperatureHumidityMessage(message)) {
+              _processTemperatureHumidityMessage(message);
+            } else if (_isReceiving) {
               _processReceivedMessageForReceiver(message);
             } else {
               _processReceivedMessage(message);
@@ -110,6 +112,19 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         }
       }
     });
+  }
+
+  bool _isTemperatureHumidityMessage(String message) {
+    // بررسی فرمت پیام دما و رطوبت
+    RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C([^D]+)D([^E]+)E(\d+)F");
+    Match? match = regex.firstMatch(message);
+
+    if (match != null) {
+      String deviceInfo = match.group(3)!;
+      return deviceInfo == "11";
+    }
+
+    return false;
   }
 
   Future<void> _loadDevicesFromHive() async {
@@ -149,6 +164,80 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _processTemperatureHumidityMessage(String message) {
+    // فرمت پیام: #<temp>A<humidity>B<?>C<deviceId>D<?>E<?>F
+    RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C([^D]+)D([^E]+)E(\d+)F");
+    Match? match = regex.firstMatch(message);
+
+    if (match != null) {
+      String temperatureStr = match.group(1)!;
+      String humidityStr = match.group(2)!;
+      String deviceInfo = match.group(3)!;
+      String receivedDeviceId = match.group(4)!.trim();
+
+      // بررسی اینکه این پیام برای سنسور دما و رطوبت است
+      if (deviceInfo == "11") {
+        bool deviceExists = Provider.of<DeviceProvider>(context, listen: false)
+            .getDevices(widget.itemName)
+            .any((device) => device["deviceId"] == receivedDeviceId);
+
+        if ((_isLearning || _isReceiving) && !deviceExists) {
+          // اضافه کردن دستگاه جدید
+          Map<String, String> deviceData = {
+            "name": "سنسور دما و رطوبت",
+            "deviceId": receivedDeviceId,
+            "image": "assets/temp-humidity-sensor.jpg",
+            "deviceInfo": "11",
+          };
+
+          setState(() {
+            deviceId = receivedDeviceId;
+            Provider.of<DeviceProvider>(
+              context,
+              listen: false,
+            ).addDevice(deviceData, widget.itemName);
+          });
+
+          // debugPrint("سنسور دما و رطوبت اضافه شد با ID: $receivedDeviceId");
+
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //   SnackBar(
+          //     content: Text(
+          //       'سنسور دما و رطوبت با ID $receivedDeviceId اضافه شد',
+          //     ),
+          //     duration: Duration(seconds: 2),
+          //   ),
+          // );
+        }
+
+        // به‌روزرسانی مقادیر دما و رطوبت
+        if (deviceExists) {
+          try {
+            double temperature = double.parse(temperatureStr);
+            double humidity = double.parse(humidityStr);
+
+            final deviceProvider = Provider.of<DeviceProvider>(
+              context,
+              listen: false,
+            );
+
+            deviceProvider.updateTemperatureHumidity(
+              receivedDeviceId,
+              temperature,
+              humidity,
+            );
+
+            debugPrint(
+              "دما و رطوبت به‌روزرسانی شد برای $receivedDeviceId: $temperature°C, $humidity%",
+            );
+          } catch (e) {
+            debugPrint("خطا در پارس کردن دما/رطوبت: $e");
+          }
+        }
+      }
+    }
+  }
+
   void _processReceivedMessage(String message) {
     RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D(\d+)E(\d+)F");
     Match? match = regex.firstMatch(message);
@@ -168,7 +257,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
         Map<String, String> deviceData;
 
         // سنسورها و دستگاه‌های ویژه
-        if (["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+        if (["12", "13", "14", "5", "9", "7"].contains(deviceInfo)) {
           switch (deviceInfo) {
             case "12":
               deviceName = "تشخیص حرکت";
@@ -182,25 +271,25 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
               deviceName = "سنسور در و پنجره";
               deviceImage = "assets/door-window-sensor.png";
               break;
-            case "11":
-              deviceName = "سنسور دما و رطوبت";
-              deviceImage = "assets/temp-humidity-sensor.jpg";
-              break;
+            // case "11":
+            //   deviceName = "سنسور دما و رطوبت";
+            //   deviceImage = "assets/temp-humidity-sensor.jpg";
+            //   break;
             case "5":
               deviceName = "سر لامپی";
-              deviceImage = "assets/lamp-head.png";
+              deviceImage = "assets/lamp-head.jpg";
               break;
             case "9":
               deviceName = "هاب IR";
-              deviceImage = "assets/unknown-device.png";
+              deviceImage = "assets/hub-IR.png";
               break;
             case "7":
               deviceName = "هاب اصلی";
-              deviceImage = "assets/unknown-device.png";
+              deviceImage = "assets/unknown-device.jpg";
               break;
             default:
               deviceName = "دستگاه ناشناخته";
-              deviceImage = "assets/unknown-device.png";
+              deviceImage = "assets/unknown-device.jpg";
               break;
           }
           if (deviceInfo == "5") {
@@ -270,7 +359,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
           ).addDevice(deviceData, widget.itemName);
         });
       } else if (!_isLearning &&
-          !["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+          !["12", "13", "14", "5", "9", "7"].contains(deviceInfo)) {
         // فقط برای کلیدهای لمسی وضعیت به‌روزرسانی شود
         bool newState = stateCode == "1";
         int relayNumber = int.parse(buttonCode);
@@ -307,7 +396,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       int poleCount = 0;
 
       // سنسورها و دستگاه‌های ویژه
-      if (["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+      if (["12", "13", "14", "5", "9", "7"].contains(deviceInfo)) {
         switch (deviceInfo) {
           case "12":
             deviceName = "تشخیص حرکت";
@@ -321,17 +410,17 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
             deviceName = "سنسور در و پنجره";
             deviceImage = "assets/door-window-sensor.png";
             break;
-          case "11":
-            deviceName = "سنسور دما و رطوبت";
-            deviceImage = "assets/temp-humidity-sensor.png";
-            break;
+          // case "11":
+          //   deviceName = "سنسور دما و رطوبت";
+          //   deviceImage = "assets/temp-humidity-sensor.jpg";
+          //   break;
           case "5":
             deviceName = "سر لامپی";
-            deviceImage = "assets/lamp-head.png";
+            deviceImage = "assets/lamp-head.jpg";
             break;
           case "9":
             deviceName = "هاب IR";
-            deviceImage = "assets/unknown-device.jpg";
+            deviceImage = "assets/hub-IR.png";
             break;
           case "7":
             deviceName = "هاب اصلی";
@@ -416,7 +505,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
       }
 
       // فقط برای کلیدهای لمسی وضعیت به‌روزرسانی شود
-      if (!["12", "13", "14", "11", "5", "9", "7"].contains(deviceInfo)) {
+      if (!["12", "13", "14", "5", "9", "7"].contains(deviceInfo)) {
         Provider.of<DeviceProvider>(
           context,
           listen: false,
@@ -786,7 +875,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
     Map<String, String> deviceData;
 
     // ایجاد deviceData بر اساس نوع دستگاه
-    if (["12", "13", "14", "11", "9", "7"].contains(_selectedDeviceInfo)) {
+    if (["12", "13", "14", "9", "7"].contains(_selectedDeviceInfo)) {
       // سنسورها و دستگاه‌های ویژه
       deviceData = {
         "name": deviceName,
@@ -995,8 +1084,10 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) =>
-                                    MotionPage(deviceName: device["name"]!),
+                                builder: (context) => MotionPage(
+                                  deviceName: device["name"]!,
+                                  deviceId: device["deviceId"]!,
+                                ),
                               ),
                             );
                           } else if (device["deviceInfo"] == "5") {
@@ -1033,6 +1124,7 @@ class _TabScreenState extends State<TabScreen> with WidgetsBindingObserver {
                               MaterialPageRoute(
                                 builder: (context) => TemperatureAndHumidity(
                                   deviceName: device["name"]!,
+                                  deviceId: device["deviceId"]!,
                                 ),
                               ),
                             );

@@ -39,4 +39,14 @@ class SerialService {
       Uint8List.fromList(command.codeUnits),
     );
   }
+
+  Future<bool> writeBytes(Uint8List bytes) async {
+    return await _flutterSerialCommunicationPlugin.write(bytes);
+  }
+
+  Future<bool> writeIntList(List<int> bytes) async {
+    return await _flutterSerialCommunicationPlugin.write(
+      Uint8List.fromList(bytes),
+    );
+  }
 }

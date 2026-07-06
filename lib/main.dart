@@ -5,7 +5,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:topaz/config/app_theme.dart';
 import 'package:topaz/config/localization.dart';
 import 'package:topaz/models/device_model.dart';
+import 'package:topaz/models/motion_model.dart';
 import 'package:topaz/models/shedule_model.dart';
+import 'package:topaz/models/temperature_humidity_model.dart';
 import 'package:topaz/providers/connection_provider.dart';
 import 'package:topaz/providers/device_provider.dart';
 import 'package:topaz/providers/theme_provider.dart';
@@ -18,6 +20,8 @@ void main() async {
   Hive.registerAdapter(ButtonStateModelAdapter());
   Hive.registerAdapter(PacketNumberModelAdapter());
   Hive.registerAdapter(ScheduleModelAdapter());
+  Hive.registerAdapter(TemperatureHumidityModelAdapter());
+  Hive.registerAdapter(MotionModelAdapter());
 
   FlutterForegroundTask.initCommunicationPort();
 

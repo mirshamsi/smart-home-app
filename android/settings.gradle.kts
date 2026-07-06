@@ -10,9 +10,28 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        google()
-        mavenCentral()
+        // ─── Mirror های ایرانی ───────────────────────────────────────
+        maven { url = uri("https://maven.myket.ir") }
+        maven { url = uri("https://maven.devneeds.ir") }
+        maven { url = uri("https://gradle.iranrepo.ir") }
+        maven { url = uri("https://gradle.jamko.ir") }
+        maven { url = uri("https://en-mirror.ir") }
+        maven { url = uri("https://archive.ito.gov.ir/gradle/maven-plugin/") }
+
+        // ─── Mirror های چین (Aliyun) ─────────────────────────────────
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+
+        // ─── منابع رسمی (Fallback) ────────────────────────────────────
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 

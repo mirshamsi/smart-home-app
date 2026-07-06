@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_serial_communication/models/device_info.dart';
@@ -30,6 +31,7 @@ class ManageDevice extends StatefulWidget {
 
 class _ManageDeviceState extends State<ManageDevice>
     with WidgetsBindingObserver {
+  String _jsonReceiveBuffer = '';
   final SerialService _serialService = SerialService();
   final _flutterSerialCommunicationPlugin = FlutterSerialCommunication();
   Map<int, ScheduleModel> relaySchedules = {};
@@ -52,7 +54,7 @@ class _ManageDeviceState extends State<ManageDevice>
     await loadSchedules();
     await _reconnectIfNeeded();
     _startScheduleChecker();
-    await _requestSwitchStatus(); // Send command once on page entry
+    // await _requestSwitchStatus(); // Send command once on page entry
 
     final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
     await deviceProvider.loadButtonStatesFromHive(widget.deviceId);
@@ -102,7 +104,7 @@ class _ManageDeviceState extends State<ManageDevice>
           newPacketNumber,
         );
         setState(() {
-          sentMessages.add(command.trim());
+          sentMessages.add("String packet sent. length=${command.length}");
           if (sentMessages.length > 10) sentMessages.removeAt(0);
         });
       } else {
@@ -230,97 +232,301 @@ class _ManageDeviceState extends State<ManageDevice>
     }
   }
 
+  // void _setupSerialListener() {
+  //   _flutterSerialCommunicationPlugin
+  //       .getSerialMessageListener()
+  //       .receiveBroadcastStream()
+  //       .listen((event) {
+  //         receivedBytesBuffer.addAll(event); // Add incoming bytes to buffer
+
+  //         // Check for end of message (e.g., #...F)
+  //         int endIndex = -1;
+  //         for (int i = 0; i < receivedBytesBuffer.length; i++) {
+  //           if (receivedBytesBuffer[i] == 0x46) {
+  //             // ASCII code for 'F'
+  //             int startIndex = -1;
+  //             for (int j = i - 1; j >= 0; j--) {
+  //               if (receivedBytesBuffer[j] == 0x23) {
+  //                 // ASCII code for '#'
+  //                 startIndex = j;
+  //                 endIndex = i;
+  //                 break;
+  //               }
+  //             }
+  //             if (startIndex != -1) break;
+  //           }
+  //         }
+
+  //         if (endIndex != -1) {
+  //           List<int> completeMessageBytes = receivedBytesBuffer.sublist(
+  //             0,
+  //             endIndex + 1,
+  //           );
+  //           String message;
+  //           try {
+  //             message = utf8.decode(completeMessageBytes); // Decode using UTF-8
+  //           } catch (e) {
+  //             message = "Error decoding: $e"; // Handle decoding errors
+  //           }
+
+  //           receivedBytesBuffer.removeRange(
+  //             0,
+  //             endIndex + 1,
+  //           ); // Clear the processed message from buffer
+
+  //           message = message.trim(); // Remove whitespace and line endings
+
+  //           setState(() {
+  //             receivedMessages.add(message);
+  //             _processReceivedMessage(message);
+  //           });
+  //           debugPrint("Received From Native: $message");
+  //         }
+  //       });
+  // }
+
   void _setupSerialListener() {
-    _flutterSerialCommunicationPlugin
+    _serialSubscription?.cancel();
+
+    _serialSubscription = _flutterSerialCommunicationPlugin
         .getSerialMessageListener()
         .receiveBroadcastStream()
         .listen((event) {
-          receivedBytesBuffer.addAll(event); // Add incoming bytes to buffer
-
-          // Check for end of message (e.g., #...F)
-          int endIndex = -1;
-          for (int i = 0; i < receivedBytesBuffer.length; i++) {
-            if (receivedBytesBuffer[i] == 0x46) {
-              // ASCII code for 'F'
-              int startIndex = -1;
-              for (int j = i - 1; j >= 0; j--) {
-                if (receivedBytesBuffer[j] == 0x23) {
-                  // ASCII code for '#'
-                  startIndex = j;
-                  endIndex = i;
-                  break;
-                }
-              }
-              if (startIndex != -1) break;
-            }
-          }
-
-          if (endIndex != -1) {
-            List<int> completeMessageBytes = receivedBytesBuffer.sublist(
-              0,
-              endIndex + 1,
+          try {
+            final chunk = utf8.decode(
+              List<int>.from(event),
+              allowMalformed: true,
             );
-            String message;
-            try {
-              message = utf8.decode(completeMessageBytes); // Decode using UTF-8
-            } catch (e) {
-              message = "Error decoding: $e"; // Handle decoding errors
+            _jsonReceiveBuffer += chunk;
+
+            while (true) {
+              final startIndex = _jsonReceiveBuffer.indexOf('{');
+              final endIndex = _jsonReceiveBuffer.indexOf('}', startIndex + 1);
+
+              if (startIndex == -1 || endIndex == -1) {
+                // اگر متن اضافی قبل از JSON داریم، حذفش کن
+                if (startIndex == -1 && _jsonReceiveBuffer.length > 2000) {
+                  _jsonReceiveBuffer = '';
+                }
+                break;
+              }
+
+              final jsonMessage = _jsonReceiveBuffer
+                  .substring(startIndex, endIndex + 1)
+                  .trim();
+
+              _jsonReceiveBuffer = _jsonReceiveBuffer.substring(endIndex + 1);
+
+              if (jsonMessage.isNotEmpty) {
+                debugPrint("Received JSON: $jsonMessage");
+
+                if (!mounted) return;
+
+                setState(() {
+                  receivedMessages.add(jsonMessage);
+                  if (receivedMessages.length > 10) {
+                    receivedMessages.removeAt(0);
+                  }
+                });
+
+                _processReceivedMessage(jsonMessage);
+              }
             }
-
-            receivedBytesBuffer.removeRange(
-              0,
-              endIndex + 1,
-            ); // Clear the processed message from buffer
-
-            message = message.trim(); // Remove whitespace and line endings
-
-            setState(() {
-              receivedMessages.add(message);
-              _processReceivedMessage(message);
-            });
-            debugPrint("Received From Native: $message");
+          } catch (e) {
+            debugPrint("خطا در دریافت سریال: $e");
           }
         });
   }
 
-  void _processReceivedMessage(String message) {
-    RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
-    Match? match = regex.firstMatch(message);
-    if (match != null && match.group(4) == widget.deviceId) {
-      String stateString = match.group(1)!;
-      // Convert stateString to binary
-      String binaryState = int.parse(
-        stateString,
-      ).toRadixString(2).padLeft(8, '0');
-      debugPrint("پیام پردازش شد: وضعیت تاچ‌ها (باینری) $binaryState");
+  // void _processReceivedMessage(String message) {
+  //   RegExp regex = RegExp(r"#(\d+)A(\d+)B(\d+)C(\d+)D([^E]+)E(\d+)F");
+  //   Match? match = regex.firstMatch(message);
+  //   if (match != null && match.group(4) == widget.deviceId) {
+  //     String stateString = match.group(1)!;
+  //     // Convert stateString to binary
+  //     String binaryState = int.parse(
+  //       stateString,
+  //     ).toRadixString(2).padLeft(8, '0');
+  //     debugPrint("پیام پردازش شد: وضعیت تاچ‌ها (باینری) $binaryState");
 
-      Provider.of<DeviceProvider>(
+  //     Provider.of<DeviceProvider>(
+  //       context,
+  //       listen: false,
+  //     ).updateButtonStatesFromString(widget.deviceId, binaryState);
+
+  //     setState(() {
+  //       final deviceProvider = Provider.of<DeviceProvider>(
+  //         context,
+  //         listen: false,
+  //       );
+  //       for (int i = 0; i < mySmartDevices.length; i++) {
+  //         mySmartDevices[i][2] =
+  //             (deviceProvider.getButtonStates(widget.deviceId)[i + 1] ?? "0") ==
+  //             "1";
+  //       }
+  //     });
+  //   } else {
+  //     debugPrint("پیام نامعتبر یا deviceId مطابقت ندارد: $message");
+  //   }
+  // }
+
+  void _processReceivedMessage(String message) {
+    try {
+      final Map<String, dynamic> data = jsonDecode(message);
+
+      if (!data.containsKey("ON_OFF")) {
+        debugPrint("پکت JSON معتبر است ولی ON_OFF ندارد: $message");
+        return;
+      }
+
+      // در اینجا فرض کردم maqsad همان deviceId دستگاه مقصد است.
+      // اگر شناسه دستگاه تو uid یا hub است، همین خط را تغییر بده.
+      final String receivedDeviceId = data["maqsad"].toString();
+
+      if (receivedDeviceId != widget.deviceId) {
+        debugPrint(
+          "deviceId مطابقت ندارد. received=$receivedDeviceId, current=${widget.deviceId}",
+        );
+        return;
+      }
+
+      final int onOffValue = data["ON_OFF"] is int
+          ? data["ON_OFF"]
+          : int.tryParse(data["ON_OFF"].toString()) ?? 0;
+
+      final String binaryState = onOffValue.toRadixString(2).padLeft(8, '0');
+
+      debugPrint("پیام JSON پردازش شد: ON_OFF=$onOffValue => $binaryState");
+
+      final deviceProvider = Provider.of<DeviceProvider>(
         context,
         listen: false,
-      ).updateButtonStatesFromString(widget.deviceId, binaryState);
+      );
+
+      deviceProvider.updateButtonStatesFromString(widget.deviceId, binaryState);
+
+      if (!mounted) return;
 
       setState(() {
-        final deviceProvider = Provider.of<DeviceProvider>(
-          context,
-          listen: false,
-        );
         for (int i = 0; i < mySmartDevices.length; i++) {
           mySmartDevices[i][2] =
               (deviceProvider.getButtonStates(widget.deviceId)[i + 1] ?? "0") ==
               "1";
         }
       });
-    } else {
-      debugPrint("پیام نامعتبر یا deviceId مطابقت ندارد: $message");
+    } catch (e) {
+      debugPrint("خطا در پردازش JSON: $e");
+      debugPrint("پیام نامعتبر: $message");
     }
   }
+
+  // Future<void> _toggleCommand(int relayNumber, bool newValue) async {
+  //   if (_isSending) {
+  //     debugPrint("ارسال دستور در حال انجام است، لطفاً منتظر بمانید...");
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("ارسال دستور در حال انجام است")),
+  //     );
+  //     return;
+  //   }
+
+  //   final connectionProvider = Provider.of<ConnectionProvider>(
+  //     context,
+  //     listen: false,
+  //   );
+  //   if (!connectionProvider.isConnected) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("لطفاً ابتدا دستگاه را متصل کنید")),
+  //     );
+  //     await _reconnectIfNeeded();
+  //     if (!connectionProvider.isConnected) return;
+  //   }
+
+  //   setState(() {
+  //     _isSending = true;
+  //   });
+
+  //   try {
+  //     final deviceProvider = Provider.of<DeviceProvider>(
+  //       context,
+  //       listen: false,
+  //     );
+  //     int lastPacketNumber = deviceProvider.getLastPacketNumber(
+  //       widget.deviceId,
+  //       relayNumber,
+  //     );
+  //     int newPacketNumber = (lastPacketNumber + 1) % 10000;
+
+  //     String command =
+  //         "#${newValue ? '1' : '0'}A${relayNumber}B7C7D${widget.deviceId}E${newPacketNumber}F\n";
+  //     debugPrint("دستور ارسالی: $command");
+
+  //     bool isMessageSent = await _serialService
+  //         .write(command)
+  //         .timeout(
+  //           const Duration(seconds: 5),
+  //           onTimeout: () {
+  //             debugPrint("مهلت زمانی ارسال دستور به پایان رسید.");
+  //             return false;
+  //           },
+  //         );
+
+  //     if (isMessageSent) {
+  //       debugPrint("دستور با موفقیت ارسال شد");
+  //       deviceProvider.updateLastPacketNumber(
+  //         widget.deviceId,
+  //         relayNumber,
+  //         newPacketNumber,
+  //       );
+  //       setState(() {
+  //         sentMessages.add(command.trim());
+  //         if (sentMessages.length > 10) sentMessages.removeAt(0);
+  //         deviceProvider.updateButtonState(
+  //           widget.deviceId,
+  //           relayNumber,
+  //           newValue ? "1" : "0",
+  //         );
+  //         mySmartDevices[relayNumber - 1][2] = newValue;
+
+  //         if (relaySchedules.containsKey(relayNumber)) {
+  //           if (newValue && relaySchedules[relayNumber]!.onTime != null) {
+  //             relaySchedules[relayNumber]!.onTriggered = true;
+  //           } else if (!newValue &&
+  //               relaySchedules[relayNumber]!.offTime != null) {
+  //             relaySchedules[relayNumber]!.offTriggered = true;
+  //           }
+  //         }
+  //       });
+  //       await saveSchedules();
+  //     } else {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(const SnackBar(content: Text("ارسال دستور ناموفق بود")));
+  //     }
+  //   } catch (e) {
+  //     debugPrint("خطای غیرمنتظره در ارسال دستور: $e");
+  //     ScaffoldMessenger.of(
+  //       context,
+  //     ).showSnackBar(SnackBar(content: Text("خطای غیرمنتظره: $e")));
+  //   } finally {
+  //     setState(() {
+  //       _isSending = false;
+  //     });
+  //   }
+  // }
 
   Future<void> _toggleCommand(int relayNumber, bool newValue) async {
     if (_isSending) {
       debugPrint("ارسال دستور در حال انجام است، لطفاً منتظر بمانید...");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("ارسال دستور در حال انجام است")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("ارسال دستور در حال انجام است")),
+        );
+      }
+      return;
+    }
+
+    if (relayNumber < 1 || relayNumber > mySmartDevices.length) {
+      debugPrint("شماره رله نامعتبر است: $relayNumber");
       return;
     }
 
@@ -328,13 +534,25 @@ class _ManageDeviceState extends State<ManageDevice>
       context,
       listen: false,
     );
+
     if (!connectionProvider.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("لطفاً ابتدا دستگاه را متصل کنید")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("لطفاً ابتدا دستگاه را متصل کنید")),
+        );
+      }
+
       await _reconnectIfNeeded();
-      if (!connectionProvider.isConnected) return;
+
+      final isConnectedAfterReconnect = Provider.of<ConnectionProvider>(
+        context,
+        listen: false,
+      ).isConnected;
+
+      if (!isConnectedAfterReconnect) return;
     }
+
+    if (!mounted) return;
 
     setState(() {
       _isSending = true;
@@ -345,18 +563,97 @@ class _ManageDeviceState extends State<ManageDevice>
         context,
         listen: false,
       );
-      int lastPacketNumber = deviceProvider.getLastPacketNumber(
+
+      int? parseNumber(String raw) {
+        final value = raw.trim();
+        if (value.isEmpty) return null;
+
+        if (value.startsWith("0x") || value.startsWith("0X")) {
+          return int.tryParse(value.substring(2), radix: 16);
+        }
+
+        if (RegExp(r'[A-Fa-f]').hasMatch(value)) {
+          return int.tryParse(value, radix: 16);
+        }
+
+        final directNumber = int.tryParse(value);
+        if (directNumber != null) return directNumber;
+
+        final match = RegExp(r'\d+').firstMatch(value);
+        if (match != null) {
+          return int.tryParse(match.group(0)!);
+        }
+
+        return null;
+      }
+
+      final int? destUid = parseNumber(widget.deviceId);
+
+      if (destUid == null || destUid <= 0 || destUid > 0xFFFF) {
+        throw Exception(
+          "deviceId باید UID معتبر بین 1 تا 65535 باشد: ${widget.deviceId}",
+        );
+      }
+
+      final int lastPacketNumber = deviceProvider.getLastPacketNumber(
         widget.deviceId,
         relayNumber,
       );
-      int newPacketNumber = (lastPacketNumber + 1) % 10000;
 
-      String command =
-          "#${newValue ? '1' : '0'}A${relayNumber}B7C7D${widget.deviceId}E${newPacketNumber}F\n";
-      debugPrint("دستور ارسالی: $command");
+      final int newPacketNumber = (lastPacketNumber + 1) & 0xFF;
 
-      bool isMessageSent = await _serialService
-          .write(command)
+      final List<int> packet = List<int>.filled(30, 0);
+
+      const int sourceDeviceNumber = 7; // هاب / اپلیکیشن
+
+      // اگر widget.deviceInfo برای کلید 4 پل عدد 64 دارد، خودش 64 می‌شود.
+      // اگر deviceInfo خالی یا غیرعددی بود، فعلاً برای کلید 4 پل پیش‌فرض 64 گذاشته شده.
+      final int destinationDeviceNumber = parseNumber(widget.deviceInfo) ?? 64;
+
+      // طبق داکیومنت:
+      // mode 15 = turn ON Relays
+      // mode 16 = turn OFF Relays
+      final int mode = newValue ? 15 : 16;
+
+      packet[0] = sourceDeviceNumber & 0xFF; // شماره دستگاه خودم
+      packet[1] = destinationDeviceNumber & 0xFF; // شماره دستگاه مقصد
+
+      packet[2] = 0x00; // UID دستگاه High؛ سمت STM32 با UID هاب جایگزین می‌شود
+      packet[3] = 0x00; // UID دستگاه Low
+
+      packet[4] = (destUid >> 8) & 0xFF; // UID مقصد High
+      packet[5] = destUid & 0xFF; // UID مقصد Low
+
+      packet[6] = newPacketNumber; // شماره پکت
+      packet[7] = 0x23; // #
+      packet[8] = 0x00; // تعداد بازنشر
+      packet[9] = mode & 0xFF; // مد کارکرد طبق داکیومنت
+
+      // برای mode 15 و 16:
+      // STATE1 = شماره رله از 1 تا 4
+      // STATE2 = صفر
+      packet[10] = 0x00;
+      packet[11] = relayNumber & 0xFF; // STATE1
+
+      packet[12] = 0x00;
+      packet[13] = 0x00; // STATE2
+
+      // واسط‌ها فعلاً صفر هستند:
+      // packet[14..29] = 0
+
+      final Uint8List bytesToSend = Uint8List.fromList([
+        ...packet,
+        0x0A, // '\n'
+      ]);
+
+      final String debugHex = bytesToSend
+          .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+          .join(' ');
+
+      debugPrint("پکت باینری ارسالی: $debugHex");
+
+      final bool isMessageSent = await _serialService
+          .writeBytes(bytesToSend)
           .timeout(
             const Duration(seconds: 5),
             onTimeout: () {
@@ -367,19 +664,25 @@ class _ManageDeviceState extends State<ManageDevice>
 
       if (isMessageSent) {
         debugPrint("دستور با موفقیت ارسال شد");
+
         deviceProvider.updateLastPacketNumber(
           widget.deviceId,
           relayNumber,
           newPacketNumber,
         );
+
+        deviceProvider.updateButtonState(
+          widget.deviceId,
+          relayNumber,
+          newValue ? "1" : "0",
+        );
+
+        if (!mounted) return;
+
         setState(() {
-          sentMessages.add(command.trim());
+          sentMessages.add(debugHex);
           if (sentMessages.length > 10) sentMessages.removeAt(0);
-          deviceProvider.updateButtonState(
-            widget.deviceId,
-            relayNumber,
-            newValue ? "1" : "0",
-          );
+
           mySmartDevices[relayNumber - 1][2] = newValue;
 
           if (relaySchedules.containsKey(relayNumber)) {
@@ -391,21 +694,29 @@ class _ManageDeviceState extends State<ManageDevice>
             }
           }
         });
+
         await saveSchedules();
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("ارسال دستور ناموفق بود")));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("ارسال دستور ناموفق بود")),
+          );
+        }
       }
     } catch (e) {
       debugPrint("خطای غیرمنتظره در ارسال دستور: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("خطای غیرمنتظره: $e")));
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("خطای غیرمنتظره: $e")));
+      }
     } finally {
-      setState(() {
-        _isSending = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
     }
   }
 
